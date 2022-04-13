@@ -1,0 +1,266 @@
+---
+title: "12_Labelled data"
+author: "Adrian Stanciu & Ranjit Singh"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+```{r, echo=FALSE, include=FALSE}
+## code to set up the cran mirror
+## needed to download needed packages into R
+r <- getOption("repos")
+r["CRAN"] <-"https://cloud.r-project.org/"
+options(repos=r)
+
+## code that first checks whether a package is required and installed,
+## and if not it will install it 
+
+# package haven is usefull to read spss .sav data formats
+if (!require(haven)) {
+    install.packages("haven")
+    require(haven)
+}
+# package tidyverse contains a series of helpful functions that 
+# are used to filter, group, manipulate data
+if (!require(tidyverse)) {
+    install.packages("tidyverse")
+    require(tidyverse)
+}
+
+# package dplyr contains yet another set of helpful functions
+if (!require(dplyr)) {
+    install.packages("dplyr")
+    require(dplyr)
+}
+
+# package kableExtra makes tables pretty :)
+if (!require(kableExtra)) {
+    install.packages("kableExtra")
+    require(kableExtra)
+}
+
+## once packages are installed, they need to be activated,
+# otherwise the user has no access to the functions included
+
+library(haven)
+library(tidyverse)
+library(dplyr)
+library(kableExtra)
+
+# Loading some functions that help us deal with labelled data
+source("helper_functions.R")
+
+```
+
+# Loading SPSS (.sav) data
+
+```{r}
+
+
+
+# Loading the ALLBUS .sav
+  # Note: user_na = TRUE means we retain the labels of missings!
+  # Otherwise, R would now replace all missings with NAs (Rs native missing values)
+
+allbus_df_spss <- haven::read_sav("data/allbus_short.sav", user_na = TRUE)
+
+
+```
+
+# Saving variable and value labels into a separate dataframe
+
+For a convenient overview of variables and their meaning, we save variable labels and value labels into a separate dataframe.
+Then we print that new dataframe with `%>% kable() %>% kable_styling()`.
+
+```{r}
+# We use register_labels(); one of the helper functions we just loaded!
+
+allbus_labels <- register_labels(allbus_df_spss)
+
+# Prints the allbus labels
+print(allbus_labels)
+
+```
+
+Now we have a convenient overview of the `r nrow(allbus_labels)` ALLBUS variables we use in this course!
+
+# Transforming labelled data into native R
+
+Next, we transform the ALLBUS data into a native R format.
+We again use a helper function we wrote: `naturalize_labelled_df()`.
+This function will create a new dataframe with three changes:
+
+1. All labelled variables are transformed into native R numeric variables. The numbers in the variable are the same that we would see in SPSS or STATA. We just remove the labels. User defined missing values, however, are all replaced by NAs (R's native missing values). 
+2. The function adds a **"factor" copy** with the suffix `_fct` of every labelled variable to the dataframe. These copies are native R factor variables, which contain the value labels as factor levels. Thus, the label information is retained and can be used in analyses, reporting, and plotting.
+3. Lastly, all variables without labels in the original dataframe remain unchanged. These are usually variables containing text, such as open ended answers. 
+
+For metric analyses, we can thus use the numeric variables. However, if we want the labels, we can use _fct variables. This is often helpful if we want to plot data, summarise data by groups, or treat variables as categorical.
+
+
+```{r}
+
+allbus_df <- naturalize_labelled_df(allbus_df_spss)
+
+```
+
+Note, how the number of variables has doubled!
+
+Number of variables in the original dataframe:
+
+```{r}
+
+length(allbus_df_spss)
+
+```
+
+Number of variables in the new dataframe:
+
+```{r}
+
+length(allbus_df)
+```
+
+Here, we see the new variable names with their "_num" and "_fct" suffixes:
+
+```{r}
+names(allbus_df)
+```
+
+# summary() for numerical and _fct variables
+
+### summary() for a "_fct" variable
+
+With a _fct variable, R will count the number of cases in each factor level.
+
+Let us look at political interest as a factor (pa02a_fct);
+
+```{r}
+
+summary(allbus_df$pa02a_fct)
+
+```
+
+### summary() for a numerical variable
+
+Again, we use political interest, but this time the numerical version pa02a_num.
+R treats numerical variables differently, and summary thus returns some descriptive statistics.
+
+```{r}
+
+summary(allbus_df$pa02a)
+
+```
+
+# Do we have to copy every variable?
+
+Not at all. This is just a workflow idea, that might be helpful to get started with R. 
+You can just as easily convert variables on the spot.
+
+Let us use the spss dataframe and convert variables.
+
+## Covert to numeric with zap_labels()
+
+We can remove labels and use a labelled variable as numeric with `zap_labels()` from the `haven::` package.
+
+```{r}
+summary(zap_labels(allbus_df_spss$pa02a))
+```
+
+## Convert to factor with as_factor()
+
+Note the underscore!
+We are using `as_factor()` from the `haven::` package. This is very different from the `as.factor()` function from base R!
+
+```{r}
+summary(as_factor(allbus_df_spss$pa02a))
+```
+
+
+# ------------------------------------
+# Practice
+
+## Explore the variables
+
+Look into allbus_labels and think about which variables are better used as factors or numeric variables.
+
+```{r}
+allbus_labels
+```
+
+
+## Why is sex as a numerical variable not very useful?
+
+Try to apply summary() to sex in the dataframe allbus_df.
+What does the output tell you?
+
+```{r}
+
+# Hint: You cannot look at the variable alone. You have to specify the dataframe too!
+#head(allbus_df)
+
+#summary(allbus_df)
+
+summary(allbus_df$sex)
+
+summary(allbus_labels)
+```
+
+### Can we understand better what is happening?
+
+#### 1. Look into the variable sex by using syntax in the format `print(dataframe_name$variable_num)`.
+
+Do not be startled. This will start printing around 1000 values :)
+
+```{r}
+
+print(allbus_df_spss$sex)
+```
+
+#### 2. Apply summary() to sex_fct to look at the labels!
+
+```{r}
+print(allbus_df$sex_fct)
+```
+
+#### 3. Which number corresponds to which label?
+
+We could look into the allbus_labels table and search for sex there.
+However, We could simply use another helper function we have written: `fetch_val_lab()`.
+
+Just remember to use the variable name without the suffix "_fct".
+
+(This might seem needlessly complicated. However, such fetch functions are handy when we want to automate processes later on.)
+
+```{r}
+fetch_val_lab("sex", allbus_labels)
+```
+
+## Left-right orientation
+
+Next, we explore the variable pa01 "SELF-PLACEMENT ON LEFT-RIGHT CONTINUUM".
+
+### Apply summary() to its factor version "_fct"
+
+```{r}
+summary(allbus_df$pa01_fct)
+
+```
+
+### How can we get the mean and median for Left-right orientation?
+
+```{r}
+mean(allbus_df$pa01_fct)
+
+mean(allbus_df_spss$pa01)
+
+mean(allbus_df$pa01)
+
+# we need the na.rm = T argument to instruct R how to handle the missing information
+# without that argument R would not be able to calculate the mean or median
+mean(allbus_df$pa01, na.rm = T)
+median(allbus_df$pa01, na.rm = T)
+```
+
+
+
+

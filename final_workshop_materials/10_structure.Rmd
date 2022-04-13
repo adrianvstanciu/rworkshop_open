@@ -1,0 +1,261 @@
+---
+title: "10_Data Structure"
+author: "Adrian Stanciu & Ranjit Singh"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+```{r, echo=FALSE, include=FALSE}
+## code to set up the cran mirror
+## needed to download needed packages into R
+r <- getOption("repos")
+r["CRAN"] <-"https://cloud.r-project.org/"
+options(repos=r)
+
+## code that first checks whether a package is required and installed,
+## and if not it will install it 
+
+# package haven is usefull to read spss .sav data formats
+if (!require(haven)) {
+    install.packages("haven")
+    require(haven)
+}
+# package tidyverse contains a series of helpful functions that 
+# are used to filter, group, manipulate data
+if (!require(tidyverse)) {
+    install.packages("tidyverse")
+    require(tidyverse)
+}
+
+# package dplyr contains yet another set of helpful functions
+if (!require(dplyr)) {
+    install.packages("dplyr")
+    require(dplyr)
+}
+
+## once packages are installed, they need to be activated,
+# otherwise the user has no access to the functions included
+
+library("haven")
+library("tidyverse")
+library("dplyr")
+```
+
+___
+# First steps
+
+Before we work with real data (ALLBUS short data), we should become familiarized with the varying data structures and vectors that `R` can handle. 
+
+# Data structures
+
+Data structures are:
+
+- values
+- vectors
+- data frames
+- lists
+
+The most common data structure types that social scientists know are data frames, which are nothing else that a tabular data set that contains all variables of interest, be they from an experimental or survey study. 
+
+When we work in `R` however, it is helpful to know what each of the four data structures are and how to handle them. In this introductory seminar we will focus on the first three, leaving the type _list_ for more advanced users as handling them requires a deeper understanding of the `R` mechanics. 
+We will nonetheless, show some examples throughout the seminar. 
+
+
+Good, let us know create our very first data structures.
+
+## Values
+
+We first assign desired values to objects in R.
+
+```{r}
+# Values are assigned a name with the "<-" sign
+
+# integer
+val_1 <- 2
+# double
+val_2 <- 2.5
+# character
+val_3 <- "abc" # for character values we need always place them between "..."
+# logical
+val_4 <- FALSE
+
+```
+
+Then we call the objects by name (!not the values), which returns the associated values.
+
+```{r}
+val_1
+val_2
+val_3
+val_4
+```
+
+### Overwriting and modifying variables
+
+When we assign something new to an existing name in R, then the name will now point towards that new value. 
+If the old content has no other name attached, R will remove the content from memory. Only overwrite used names if you know you don't need the old value (or content in general) any more.
+
+```{r}
+
+a <- 2
+
+a <- 3
+
+a
+
+```
+
+If you want to get rid of a name and its data, call rm():
+
+```{r}
+rm(a)
+```
+
+
+We can also modify values by using the previous value. The code looks nonsensical, but it works because `R` works on the right side of the assignment first (2+3 = 5) and only then overwrites b with the new value 5.
+
+```{r}
+b <- 2
+b <- b + 3
+b
+
+```
+
+Be sure to keep track of the names used and only overwrite them if you no longer need the content that the name pointed to earlier. Copying data in R is cheap and easy, after all.
+
+## Vectors
+
+Vectors are a sequence of values. As above with single values, we can also assign whole vectors to names and then retrieve them with those names. 
+
+`R` often uses mathematical terms, such as vector, to describe concepts. The main use of vectors in this course is as data variables.
+
+Let us create two vectors with numbers and call it after assigning values to it. 
+
+```{r}
+v_1 <- c(2,1,1,2)
+v_2 <- c(0,1,2,3,4,5,6,7,8,9)
+v_1
+v_2
+```
+
+When working with vectors, we sometimes want to call a specific value that is stored in that vector. For this, we can tell `R` to retrieve a specific value in a vector by using its "index" that is its numeric position in that vector.
+
+Let's say we want to retrieve the 2nd "2" in our first vector. This is stored in fourth place, so index = 4. 
+
+To call a specific value from a vector, we use specify the index of the value inside [] as shown: `vector[index]`. 
+
+```{r}
+v_1[4]
+```
+
+This is perhaps not so intuitive. Let us retrieve now the value "9" from our second vector. Which index needs to be called?
+
+```{r}
+v_2[9]
+```
+
+Hmhh...this didn't retrieve the "9" as we wanted, but the "8", which we know to be stored at a position lower than the one we want to call.
+
+In `R` the indexing starts at position 1, so in our case we have "0" holding index 1, "1" holding index 2, and so on. To retrieve "9" we thus need to call index 10. This might surprise you, if you have experience with other programming languages where indices start at zero.
+
+```{r}
+v_2[10]
+```
+
+## Type of vectors
+
+As there are varying types of values, so there are varying types of vectors. Remember, vectors are but a sequence of values stored in an object in `R`. 
+
+The vector types are:
+
+1. numeric, which can be further separated into
+- integer
+- double
+2. character
+3. logical
+4. factor
+
+Let us create examples for each type and then call them.
+
+```{r}
+# numeric: integer 
+v_1 <- c(3,5,0,2)
+# numeric: double
+v_2 <- c(4.58,3.62,9.88,2.35)
+# character
+v_3 <- c("abc","def","ghi","jkl")
+# logical
+v_4 <- c(TRUE,FALSE,TRUE,FALSE)
+# factor
+v_5 <- c("man","woman","div.","man")
+
+v_1
+v_2
+v_3
+v_4
+v_5
+```
+
+One thing that can be confusing is the similarity between `v_3` (character vector) and `v_5` (factor vector). 
+
+Character vectors should be seen as objects that contain arbitrary text, where the universe of possible texts is unknown. Imagine respondents' answers to an open-ended question. And in computational social science, imagine vectors containing content or posts, which we can then feed into natural language processing or sentiment analysis functions. 
+
+Factors in `R` are variables which contain values from a set of possible values that is known in advance. This is an important distinction, because there can be possible values (i.e., "levels") that do not occur in the data. Imagine asking about respondents' sex. The questionnaire provided the options "male", "female", or "intersex". Even if noone chose the option "intersex" it is helpful to know that it was there. Many functions in `R` also treat factors differently. In the social sciences, categorical (i.e., nominal) and ordinal variables are usually factors. 
+
+
+## Data frames
+
+Data frames are tabular data sets. As data sets contain multiple variables and observations, so do data frames contain multiple vectors (columns) and values (rows).
+
+Let us construct some example data frames using `tibble` (column wise) and `tribble` (row wise) function from the package `tidyverse`. And then retrieve these data frames with their names (df_1 and df_2). 
+
+```{r}
+# column wise
+df_1 <- tibble(
+a = c(1, 2, 3, 4),
+b = c(3.4, 4.6, 6.9, 9.2),
+c = c(TRUE, FALSE, FALSE, TRUE)
+)
+
+# row wise
+df_2 <- tribble(
+~a, ~b, ~c, #defines columns
+1, 3.4, TRUE,
+2,  4.6, FALSE,
+3, 6.9, FALSE,
+4,  9.2, TRUE
+)
+
+df_1
+df_2
+```
+
+### Basic functions for data frames
+
+When we work with data frames, sometimes we want to inspect them visually, at face value. There are several functions that we can use for that. 
+
+- `names()`: lists all variable names
+- `length()` or `ncol()`: returns the number of columns/variables
+- `nrow()`: returns the number of rows/observations
+- `head()`: prints an excerpt of the data frame, the first few observations
+- `tail()`: prints an excerpt of the data frame, the last few observations
+- `view()`: opens Rstudio's data view (very similar to SPSS data view)
+- `glimpse()`: lists variables and gives a preview of their contents vertically
+
+Use the empty `R` code field (chunk) below to experiment with these basic functions and the `df_1` and `df_2` created above. 
+
+<!---NOTE: placing in an R code chunk the symbol # at the beginning of a line or text will inform R not to read that line,
+this can be helpful when documenting the purpose of a function, or the meaning of a code,
+this will greatly simplify tasks for the future self.
+
+Mind you: placing the symbol # outside the R code chunk does not have the same effect--->
+
+```{r}
+names(df_1)
+length(df_1)
+ncol(df_2) 
+#...
+```
+
+...We now have a look at how to import data into R, and what are relevant aspects to consider in the process.
+

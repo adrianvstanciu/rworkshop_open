@@ -1,0 +1,189 @@
+---
+title: "extra_exercises"
+author: "Adrian Stanciu & Ranjit Singh"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 4
+    toc_float: true
+---
+
+
+```{r, echo=FALSE, include=FALSE}
+## code to set up the cran mirror
+## needed to download needed packages into R
+r <- getOption("repos")
+r["CRAN"] <-"https://cloud.r-project.org/"
+options(repos=r)
+
+## code that first checks whether a package is required and installed,
+## and if not it will install it 
+
+# package haven is usefull to read spss .sav data formats
+if (!require(haven)) {
+    install.packages("haven")
+    require(haven)
+}
+# package tidyverse contains a series of helpful functions that 
+# are used to filter, group, manipulate data
+if (!require(tidyverse)) {
+    install.packages("tidyverse")
+    require(tidyverse)
+}
+
+# package dplyr contains yet another set of helpful functions
+if (!require(dplyr)) {
+    install.packages("dplyr")
+    require(dplyr)
+}
+
+# package psych contains functions to calculate cohen's d and other useful
+# social science coefficients and tests
+if (!require(psych)) {
+    install.packages("psych")
+    require(psych)
+}
+# data visualization package
+if (!require(ggplot2)) {
+    install.packages("ggplot2")
+    require(ggplot2)
+}
+
+## once packages are installed, they need to be activated,
+# otherwise the user has no access to the functions included
+
+library("haven")
+library("tidyverse")
+library("dplyr")
+library("tidyverse")
+library("psych")
+library("ggplot2")
+
+# Loading some functions that help us deal with labelled data
+source("helper_functions.R")
+
+```
+
+
+```{r include=FALSE}
+# LOAD DATA
+
+# Load data with SPSS labelled  variables
+df_allbus_spss <- readRDS("allbus_short.Rds")
+
+# save the variable and value labels
+allbus_labels <- register_labels(df_allbus_spss)
+
+# create native R dataframe
+df_allbus <- naturalize_labelled_df(df_allbus_spss)
+
+# remove the SPSS style dataframe (optional)
+rm(df_allbus_spss)
+```
+
+
+# Using different packages for the same task
+
+
+Measures of effect size in general are informative on top of reporting the p-value (significance test) of your test. Effect size measures inform about how meaningful a found effect is given the observed data. 
+
+Perhaps the most common effect size measure is Cohen's _d_. A nice visualization tool on intepreting and understanding Cohen's _d_ and its relation to data can be seen [here](https://rpsychologist.com/cohend/).
+
+Though, Cohen did not intend on suggesting thresholds for interpreting observed _d_ values, it has become sort of a standard procedure to evaluate the strength of an effect according to these thresholds:
+
+- small effect: _d_ >= 0.2
+- medium effect: _d_ >= 0.5
+- large effect: _d_ >= 0.8
+
+Remember that Cohen's _d_ is an effect size measure for experimental data, otherwise said for comparisons of means across groups.
+
+Let us pretend in the ALLBUS data we have experimental information (we've conducted an experiment of sorts) on the `pv22` "Probability to vote for the GREEENS if elections were held next week" and we want to compare men and women, thus the "treatment" condition is whether someone is a female or a man (`sex`).
+
+```{r}
+# calculates cohen's d for the group comparison men~women on intention to vote for greens
+cohen_d_sex_pv22 <- psych::cohen.d(df_allbus$pv22,
+                                   group=df_allbus$sex) 
+
+cohen_d_sex_pv22
+```
+
+Results show that there is a small effect (as seen in the column "effect"). The difference between men and women in their intention to vote for the Greens at the next German elections is small. 
+
+Though this does not apply only to calculating Cohen's _d_, let us use this as an example. As you will learn more about `R` and the `R` community, you will get to realize that one thing (operation) may be done in multiple ways. A quick search on `R` documentation reveals two additional packages that have functions to calculate Cohen's _d_. 
+
+Use the packages `lsr` and `effsize` and calculate the Cohen's _d_ for the same "experimental" setting as above, `sex` as the grouping variable and `pv22` as the outcome of interest. 
+
+Remember to first install (if needed) the packages and instruct `R` from which package to call the function to calculate Cohen's _d_!
+
+Read the package instructions before applying the functions, otherwise you might get some weird results that can be difficult to explain.
+
+Read [here](https://www.rdocumentation.org/packages/lsr/versions/0.5.2/topics/cohensD) for `lsr` package. 
+Read [here](https://www.rdocumentation.org/packages/effsize/versions/0.8.1/topics/cohen.d) for `effsize` package.
+
+```{r, warning=FALSE}
+## installs packages
+if (!require(lsr)) {
+    install.packages("lsr")
+    require(lsr)
+}
+if (!require(effsize)) {
+    install.packages("effsize")
+    require(effsize)
+}
+
+
+## activates packages
+library(lsr)
+library(effsize)
+
+## calculates Cohen's d with lsr package
+###
+## calculating Cohen's d this ways requires that you first manipulate the data, such that 
+lsr_cohen_d_wrong <- lsr::cohensD(x=df_allbus$sex,
+                            y=df_allbus$pv22)
+
+
+## the richt way, which requires extra work
+temp_lsr_df <- df_allbus %>% 
+  # selects only the variables of interest  
+  select(c("sex","pv22")) %>% 
+  # adds a unique identifier columns (useful for next step)  
+  mutate(rn=row_number()) %>% 
+  # transforms data into wide format, such that one column is for men and one for women  
+  pivot_wider(names_from = sex, 
+                values_from = pv22)
+
+## now calculates cohen's d with lsr package
+lsr_cohen_d_right <- lsr::cohensD(temp_lsr_df$`1`,temp_lsr_df$`2`)
+
+## calculates Cohen's d with effsize package
+###
+## like with the lsr package, the data needs to be transformed into wide format
+temp_effsize_df <- df_allbus %>% 
+  # selects only the variables of interest  
+  select(c("sex","pv22")) %>% 
+  # adds a unique identifier columns (useful for next step)  
+  mutate(rn=row_number()) %>% 
+  # transforms data into wide format, such that one column is for men and one for women  
+  pivot_wider(names_from = sex, 
+                values_from = pv22)
+
+## now calculates Cohen's d with effsize package
+effsize_cohen_d_right <- effsize::cohen.d(temp_effsize_df$`1`, temp_effsize_df$`2`,
+                                          na.rm=TRUE)
+
+```
+
+Inspect if all approaches give identical results.
+
+```{r}
+# psych package
+cohen_d_sex_pv22$cohen.d[2]
+
+# lsr package
+lsr_cohen_d_right
+
+# effsize package
+effsize_cohen_d_right$estimate
+```

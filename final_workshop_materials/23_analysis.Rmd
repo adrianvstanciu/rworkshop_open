@@ -1,0 +1,529 @@
+---
+title: "23_analysis"
+author: "Adrian Stanciu & Ranjit Singh"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 4
+    toc_float: true
+---
+
+```{r, echo=FALSE, include=FALSE}
+## code to set up the cran mirror
+## needed to download needed packages into R
+r <- getOption("repos")
+r["CRAN"] <-"https://cloud.r-project.org/"
+options(repos=r)
+
+## code that first checks whether a package is required and installed,
+## and if not it will install it 
+
+# package haven is usefull to read spss .sav data formats
+if (!require(haven)) {
+    install.packages("haven")
+    require(haven)
+}
+# package tidyverse contains a series of helpful functions that 
+# are used to filter, group, manipulate data
+if (!require(tidyverse)) {
+    install.packages("tidyverse")
+    require(tidyverse)
+}
+
+# package dplyr contains yet another set of helpful functions
+if (!require(dplyr)) {
+    install.packages("dplyr")
+    require(dplyr)
+}
+
+# data visualization package
+if (!require(ggplot2)) {
+    install.packages("ggplot2")
+    require(ggplot2)
+}
+# package to calculate t_test
+if (!require(tidymodels)) {
+    install.packages("tidymodels")
+    require(tidymodels)
+}
+# package for nice tables
+if (!require(kableExtra)) {
+    install.packages("kableExtra")
+    require(kableExtra)
+}
+
+## once packages are installed, they need to be activated,
+# otherwise the user has no access to the functions included
+
+library("haven")
+library("tidyverse")
+library("dplyr")
+library("tidyverse")
+library("ggplot2")
+library("tidymodels")
+library("kableExtra")
+# Loading some functions that help us deal with labelled data
+source("helper_functions.R")
+
+```
+
+
+```{r include=FALSE}
+# LOAD DATA
+
+# Load data with SPSS labelled  variables
+df_allbus_spss <- readRDS("allbus_short.Rds")
+
+# save the variable and value labels
+allbus_labels <- register_labels(df_allbus_spss)
+
+# create native R dataframe
+df_allbus <- naturalize_labelled_df(df_allbus_spss)
+
+# remove the SPSS style dataframe (optional)
+rm(df_allbus_spss)
+```
+
+___
+# About output
+
+When performing analyses in `R` we get as output a summary of results, which is informative but not always what we might need. 
+
+For instance. 
+
+The output of the test `cor.test()` holds rich information that we might want to store for further analyses. Or, we might want to have a select set of reported coefficients when we calculate correlations between same variables across a multitude of data sets (for instance in replication projects). 
+
+```{r}
+# copied from 22_descriptives section
+###
+# Pearson's r correlation coefficient
+pearson_r_ep03_ls01_v2 <- cor.test(df_allbus$ep03, # defines variable 1
+                           df_allbus$ls01, # defines variable 2
+                           method="pearson", # defines which correlation type to calculate
+                           use="complete.obs") # specifies that missing data should not be considered
+pearson_r_ep03_ls01_v2
+```
+
+If for any reason we want to store the `t`-test value, `p`-value and so on in a vector or a data frame, that can be (relatively) easy done. We need to call the location in the created output object of the coefficient of interest. See below:
+
+```{r}
+# identify the place of the desired coefficient.
+# we can do this by first calling the STRucture of that object using the command str()
+str(pearson_r_ep03_ls01_v2)
+
+# we will get an output with varying lines, and some of them begin with the symbol $
+# the symbol $ specifices an element stored in the object that can be...called as a separate object.
+# see below
+
+# stores the t-test value
+t_value_ep03_ls01 <- pearson_r_ep03_ls01_v2$statistic
+# stores the p-value and at the same time rounds to nearest 2 decimals
+p_value_ep03_ls01 <- pearson_r_ep03_ls01_v2$p.value %>% round(2)
+
+# calls the t- and p-values
+t_value_ep03_ls01
+p_value_ep03_ls01
+```
+
+Fancier stuff.
+
+We can make an output more human-readable by tidying-up it a little. This `broom::tidy()` can help. It is the function `tidy()` from the package `broom` that comes as part of the general `tidyverse` package. So, once you've installed `tidyverse`, you will have access to all functions of the `broom` package.
+
+```{r}
+# the output from above but in a tidier format
+pearson_r_ep03_ls01_v2 %>% 
+  broom::tidy()
+
+```
+
+We can further edit the results so it gets increasingly human-readable. 
+
+```{r}
+## we can install an extra package - kableExtra
+##
+if (!require(kableExtra)) {
+    install.packages("kableExtra")
+    require(kableExtra)
+}
+
+# activates package
+library(kableExtra)
+
+## 
+pearson_r_ep03_ls01_v2 %>% 
+  broom::tidy() %>%
+  t() %>% # t() is actually a matrix operation and "transposes" the dataframe. rows become columns and vice versa
+  kable() %>% 
+  kable_styling()
+```
+
+# t-tests
+
+As a brief reminder, t-test are a formal way of examining whether means differ between groups (or from zero, or between two observations of same individuals). 
+
+In the session **22_descriptives**, we've seen different ways to calculate Cohen's _d_. But Cohen's _d_ gives the effect size of a mean difference, that is how meaningful the found difference between the means of two groups is. 
+
+We calculated Cohen's _d_ for the difference between men and women on their intention to vote for the Greens at the next German elections.
+
+```{r}
+# calculates cohen's d for the group comparison men~women on intention to vote for greens
+cohen_d_sex_pv22 <- psych::cohen.d(df_allbus$pv22,
+                                   group=df_allbus$sex)
+cohen_d_sex_pv22
+```
+
+But now we would like to have a formal test of whether the found difference is statistically significant, albeit a small one as the Cohen's _d_ informs. For this, we can use the t-test from the package `infer` (comes with tidyverse general package).
+
+```{r}
+# t-test
+t_test_pv22_sex <- df_allbus %>%
+  infer::t_test(pv22 ~ sex)
+t_test_pv22_sex
+```
+
+Let's call together the Cohen's _d_ and t-test results.
+
+```{r}
+cohen_d_sex_pv22
+t_test_pv22_sex
+```
+
+Now that we have this information, can we put together a table with results for our paper or report? 
+
+Here we can use a little trick! Tidy analyses functions, such as t_test() or results passed into tidy() are dataframes with exactly one row. 
+
+So we can actually save that whole result in a data frame cell, and then `unnest()` it, to unfold the contained variables. The output of cohen.d is not so tidy, but we can work around that, by forcing the cohen.d effect estimates into a tibble first.
+
+```{r}
+
+df_report <- tibble(
+  output_variable = "pv22",
+  group_variable = "sex",
+  cohens_d = cohen_d_sex_pv22$cohen.d[[2]], 
+  tidy_t_test = t_test_pv22_sex # Here we save the result data frame of t_test into a cell!
+)%>% unnest(tidy_t_test) # unfold t_test results into columns
+
+# show selected results
+df_report %>% 
+  t() %>% kable() %>% kable_styling()
+
+```
+
+This is extremely useful to keep your results organized as you progress with your analyses. Also see the exercise below.
+
+If `unnest()` feels strange to you, try out this little example:
+
+```{r}
+
+nested_df <- tibble(a = c(1), b = c("d")) # small df with one row and two variables
+nested_df
+
+larger_df <- tibble(
+  var_in_larger = "something",
+  df_column = nested_df # small df saved into the cell (!) of a variabe in a larger dataframe
+)
+larger_df
+
+larger_df %>% unnest(df_column) # unnest() unfolds the data of the small df into the larger one
+```
+
+Un-nest can of course also deal with more complex structures. It is a versatile tool, as we will see on the outlook example below.
+
+
+### Outlook: Automate analyses with purrr:map()
+
+Keep in mind that later on, we usually do not run analyses manually and separately. Instead, R can automate the process easily with purrr.
+
+Below, we permutate all combinations of metric variables and grouping variables and run the analyses above (t-test and Cohen's d). 
+
+```{r warning=FALSE}
+
+many_analyses <- tibble(
+  metric_var = c("pa02a", "pv22", "pv20", "ls01"),
+  group_var = list(c("sex_fct", "german_fct")) # We save the whole list in each cell!
+) %>% 
+  unnest(group_var) %>% # unnesting the group variables to permutate metric_var and group_var
+  mutate( # We map2() over the variable pairs and conduct analyses
+    cohens_d = map2(metric_var, group_var, 
+                    ~cohen.d(x = df_allbus[[.x]], group = df_allbus[[.y]])$cohen.d %>% 
+                      as_tibble ),
+    t_test_result = map2(metric_var, group_var, 
+                         ~t_test(as.formula(paste0(.x, "~", .y)), 
+                                 x = df_allbus))
+  ) %>% 
+  unnest(cohens_d, names_sep = "_") %>% # unnest cohen's d
+  unnest(t_test_result) # unnest t_test
+
+many_analyses %>% 
+  mutate(
+    metric_var = map_chr(metric_var, fetch_var_lab, allbus_labels), # fetch variable labels
+    group_var = map_chr(group_var %>% str_remove("_fct"), fetch_var_lab, allbus_labels),
+    across(where(is.numeric), round, 3)
+  ) %>% 
+  select(contains("_var"), cohens_d_effect, p_value) %>% 
+  kable() %>% kable_styling()
+
+
+
+```
+
+
+## Exercise
+
+Add a new row to the table **df_report** with the information from mean comparison between german and non-german (`german`) and the intention to vote for SPD (`pv20`). 
+
+Remember the steps:
+
+- perform t-test and save its results
+- Perform Cohen's *d* and save its results
+- Put the results in a dataframe and unnest them
+- Perhaps add the results as a new row with add_row()?
+
+```{r}
+
+#results
+## to be deleted: key to exercise
+# cohen d
+cohen_d_german_pv20 <- psych::cohen.d(df_allbus$pv20,
+                                   group=df_allbus$german)
+
+# t-test
+t_test_pv20_german <- df_allbus %>%
+  infer::t_test(pv20 ~ german)
+
+
+df_report <- tibble(
+  output_variable = "pv20",
+  group_variable = "german",
+  cohens_d = cohen_d_german_pv20$cohen.d[[2]], 
+  tidy_t_test = t_test_pv20_german # Here we save the result data frame of t_test into a cell!
+) %>% unnest(tidy_t_test) %>% # And here we unfold it into separate columns
+  add_row(df_report, .after = TRUE) # adding it to the existing df_report tibble
+
+# show table
+df_report %>% kable() %>% kable_styling()
+```
+
+# Regression
+
+## OLS
+
+Simple regression, or the OLS regression, is one whereby one dependent variable is regressed on one independent variable. The simplest form of regression is in many ways similar to a correlation between two continuous variables.
+
+Multiple regressions on the other hand regresses one dependent variables on multiple independent variables.
+
+Let us revisit a correlation coefficient we've looked at in the session `22_descriptives`. We correlated `ep03` (Respondent's current financial situation) with `ls01` (Overall life satisfaction of respondent). 
+
+```{r}
+# Pearson's r correlation coefficient
+pearson_r_ep03_ls01_v2
+```
+
+The correlation coefficient however only informs about whether two variables are associated or not, whereas a regression is informative about the direction of the association and calculates a test of significance. 
+
+```{r}
+# regresses ls01 on ep03
+reg_ls01_ep03 <- df_allbus %>% 
+  lm(ls01 ~ ep03,.) 
+  #please note the period! This feeds the dataframe from the pipe into lm()
+  # The full form would be: df_allbus %>% lm(ls01 ~ ep03, data = .)
+
+# calls the output of the regression
+summary(reg_ls01_ep03)
+
+```
+
+We can also visualize the regression whereby we first build a scatter plot and draw a regression line to the plot.
+
+Note that we are using geom_count(), because geom_point() would just draw grid of points.
+
+```{r}
+p_scatter_1 <- df_allbus %>%
+  ggplot(aes(y=ls01,
+             x=ep03)) +
+  geom_count()
+
+p_scatter_1
+
+# scatter plot with regression line
+p_scatter_2 <- df_allbus %>% 
+  ggplot(aes(x=ep03,y=ls01)) + 
+  geom_count() + 
+  geom_smooth(method="lm",se=FALSE) 
+
+p_scatter_2
+
+
+# In case you were wondering: 
+# Yes, geom_smooth with method = "lm" uses the same regression engine as lm() behind the scences
+
+```
+
+This might not look too intuitive. Let us try again with the aggregated index we've created in session 22_descriptives. And now let us first regress voting intention for the German government (the aggregated index over `pv20`, `pv21` and `pv22`) on self-placement on left-right spectrum (`pa01`).
+
+```{r}
+# creates data frame containing only the variables of interest
+df_reg_2 <- df_allbus %>% 
+  mutate(vote_int=(pv20+pv21+pv22)/3) %>% 
+  select(pa01,vote_int) 
+
+# estimates the gression model
+reg_pa01_vot_int <- df_reg_2 %>% 
+  lm(vote_int ~ pa01,.)
+
+# calls the output of the regression
+summary(reg_pa01_vot_int)
+
+# plots and then adds a regression line
+p_reg_pa01_vot_int <- df_reg_2 %>% 
+  ggplot(aes(x=pa01,
+             y=vote_int)) +
+  geom_count() +
+  geom_smooth(method="lm",se=FALSE)
+
+# calls the plot with regression line
+p_reg_pa01_vot_int
+
+```
+
+Let us clean up a bit the results output.
+
+```{r}
+# with function glance()
+glance(reg_pa01_vot_int)
+
+# with function tidy()
+tidy(reg_pa01_vot_int)
+```
+
+We can also add a factor into the regression model, so we get different estimations for each level of the factor. Here let us add `sex_fct` (whether a participant is male or female). 
+
+Tipp: Adding a factor into a regression means that R automatically creates indicator coded dummies (also called treatment coded). This means the first level in the factor becomes the reference category and is omitted. All other levels get their own dummies. These then represent the effect **in comparison** to the reference category. If you want another reference, simply change the order of levels with:
+`factor_var = fct_relevel(factor_var, "desired reference level")`
+
+```{r}
+# calculates the regression
+reg_pa01_vot_int <- df_allbus %>% 
+  mutate(vote_int=(pv20+pv21+pv22)/3) %>% # creating our voting index
+    lm(vote_int ~ pa01 + sex_fct,.)
+
+# plots the results and add a regression line for each level of the factor variable
+p_pa01_vot_int_fct <- reg_pa01_vot_int %>% augment() %>% ggplot(aes(color=sex_fct))+
+     geom_point(aes(pa01,vote_int))+
+     geom_line(aes(pa01,.fitted))
+
+# Formal results
+reg_pa01_vot_int %>% glance()
+reg_pa01_vot_int %>% tidy()
+```
+
+
+```{r}
+# And the plot
+p_pa01_vot_int_fct
+```
+
+### Standardized betas?
+
+Researchers used to SPSS might wonder: Where are my betas? The regression coefficients we have seen were unstandardized Bs in units of the respective variable.
+
+In R we have to standardize metric variables manually with scale() first.
+
+```{r}
+# Unstandardized
+df_allbus %>% 
+  lm(pv22 ~ age, .)
+
+# Standardized
+df_allbus %>% 
+  lm(scale(pv22) ~ scale(age), .)
+
+```
+With many variables, that gets ugly fast. So instead, we can simply standardize all metric variables before running lm().
+
+```{r}
+df_allbus %>% 
+  mutate(across(where(is.numeric), scale)) %>% 
+  lm(pv22 ~ age, .)
+```
+The factor variables remain unchanged, by the way. (The `where(is.numeric)` part above spares them.) 
+So this works fine:
+
+```{r}
+
+df_allbus %>% 
+  mutate(across(where(is.numeric), scale)) %>% 
+  lm(pv22 ~ age + sex_fct, .) %>% tidy()
+
+```
+
+
+## Exercise
+
+Imagine you are conducting a step-wise multiple regression where you want to determine whether `vote_int` (aggregated score over the voting probability for one of the three parties forming the current German government) can be regressed on `pa01` (Self-placement on left-right political spectrum) and participants` gender `sex`. 
+
+You expect that alone `pa01` explains some of the variance in `vote_int` and want to explore the role of `sex` as well. 
+
+You end up realizing that you need to estimate three different models - as we've done above - but you also want to have a formal test of model comparison. For this exercise, compare the three models from above as explained in the power point at slide "lm() model comparison using anova()". 
+
+
+```{r}
+### to be deleted: this is key to exercise
+
+# MODEL 1
+# creates data frame containing only the variables of interest
+df_reg_2 <- df_allbus %>% 
+  mutate(vote_int=(pv20+pv21+pv22)/3) %>% 
+  select(pa01,vote_int) 
+
+# estimates the simple ression model
+# vote_int ~ pa01
+model_1 <- df_reg_2 %>% 
+  lm(vote_int ~ pa01,.)
+
+
+# MODEL 2
+# creates new data frame containing 
+df_reg_3 <- df_allbus %>% 
+    mutate(vote_int=(pv20+pv21+pv22)/3) %>% 
+    select(sex,pa01,vote_int) 
+# transforms sex into a factor variable
+df_reg_3$sex <- as.factor(df_reg_3$sex)
+
+# calculates the regression
+# vote_int ~ pa01 + sex
+model_2 <- df_reg_3 %>% 
+    lm(vote_int ~ pa01 + sex,.)
+
+# MODEL 3
+model_3 <- df_reg_3 %>% 
+    lm(vote_int ~ pa01 * sex,.)
+ 
+
+###
+
+# Checks the explantory power of each model
+# R square model 1
+rsq_model_1 <- glance(model_1)$adj.r.squared
+rsq_model_1
+# R square model 2
+rsq_model_2 <- glance(model_2)$adj.r.squared
+rsq_model_2
+# R square model 3
+rsq_model_3 <- glance(model_3)$adj.r.squared
+rsq_model_3
+
+###
+
+# compares models with F-test
+model_comparison <- anova(model_1,model_2,model_3) %>% 
+  tidy() %>% 
+  add_column(model=c("model 1","model 2", "model 3")) %>% # adds a new column to indicate which model is which
+  relocate(model, .before = res.df) %>% # relocates new column at the beginning of table
+  add_column(r_square=c(rsq_model_1,rsq_model_2,rsq_model_3)) %>% 
+  relocate(r_square,.after=model)
+model_comparison
+
+```
+

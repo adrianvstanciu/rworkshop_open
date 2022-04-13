@@ -1,0 +1,372 @@
+---
+title: "32_automation"
+author: "Adrian Stanciu & Ranjit Singh"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 4
+    toc_float: true
+params:
+  var:
+    label: "Variable to operate on"
+    value: "ep01"
+    input: select
+    multiple: false
+    choices: [ep01,ep03,ep04,ep06]
+---
+
+
+```{r, echo=FALSE, include=FALSE}
+# code to set up the entire markdown environment
+knitr::opts_chunk$set(echo = FALSE,  warning = FALSE, message = FALSE)
+
+## code to set up the cran mirror
+## needed to download needed packages into R
+r <- getOption("repos")
+r["CRAN"] <-"https://cloud.r-project.org/"
+options(repos=r)
+
+## code that first checks whether a package is required and installed,
+## and if not it will install it 
+
+# package haven is usefull to read spss .sav data formats
+if (!require(haven)) {
+    install.packages("haven")
+    require(haven)
+}
+# package tidyverse contains a series of helpful functions that 
+# are used to filter, group, manipulate data
+if (!require(tidyverse)) {
+    install.packages("tidyverse")
+    require(tidyverse)
+}
+
+# package dplyr contains yet another set of helpful functions
+if (!require(dplyr)) {
+    install.packages("dplyr")
+    require(dplyr)
+}
+
+## once packages are installed, they need to be activated,
+# otherwise the user has no access to the functions included
+
+library("haven")
+library("tidyverse")
+library("dplyr")
+# Loading some functions that help us deal with labelled data
+source("helper_functions.R")
+
+```
+
+
+```{r include=FALSE}
+# LOAD DATA
+
+# Load data with SPSS labelled  variables
+df_allbus_spss <- readRDS("allbus_short.Rds")
+
+# save the variable and value labels
+allbus_labels <- register_labels(df_allbus_spss)
+
+# create native R dataframe
+df_allbus <- naturalize_labelled_df(df_allbus_spss)
+
+# remove the SPSS style dataframe (optional)
+rm(df_allbus_spss)
+```
+
+___
+As we've seen so far, `R` can be a powerful tool to analyzing or visualizing data. And many a things can be programmed. But what makes `R` so attractive for users is its ability to handle large, repetitive tasks as well as very large data types. And, of course its ability to program beyond statistical analyses. 
+
+In this session, we will see some basic strategies in dealing with repetitive tasks in `R`, and we will approach this in two ways: 
+
+1. By looking at functions and family of functions that can operate across columns in a data frame
+2. By seeing how paramterized reports/ analyses work. 
+
+We can refer to this as varying automation strategies. 
+
+# Automated operations
+
+Already in some previous sessions we've used some automation functions, but at the time we didn't spend too much time on understanding the mechanics of the function. 
+
+Examples of where automated operations can be useful are when having a large data set and wanting to apply one function to each variable in the data set.
+
+In the ALLBUS data set for instance, we have three variables on voting intention for the three parties forming the current German government. 
+
+- `pv20`: PROBABILITY: VOTE FOR SPD
+- `pv21`: PROBABILITY: VOTE FOR FDP
+- `pv22`: PROBABILITY: VOTE FOR THE GREENS
+
+We might want to operate on all these variables at once, as opposed to on once at a time. Say, we want to inspect means and sd.
+
+## Aggrete operations
+
+This is an almost identical to code to the one we've used in the session `21_aggregation`. Let us have a closer look at what happens here.
+
+```{r}
+# summarises across three columns and then creates a new data frame containing means and sd of all three variables
+automat_summarise_1 <- df_allbus %>% 
+    summarise(across(c("pv20","pv21","pv22"), # This is the selector part of across(); which vars to process
+                                list(mean= ~mean(.,na.rm=TRUE), # This is the functional part: what to do
+                                     sd= ~sd(., na.rm=TRUE)) 
+                                ) # closes the across() 
+                                ) # closes the summarise()
+automat_summarise_1
+```
+
+- The function `summarise()` instructs `R` to aggregate information, or to summarize observations
+- We are next instructing `R` over what variables to operate. In this case we are summarizing across three variables, `pv20`, `pv21`, and `pv22`. `across(c(xxx))` means that `R` is taking the operation we want to apply one column at a time and once it has finished with one column it moves _across_ to the next one as instructed
+- Finally, we instruct `R` what operations to perform across columns/ variables. We've already seen this in the session `21_aggregation`.
+
+So far so good. But, in this case we see that the variables of interest have the same naming structure: `pv` followed by a number. Instead of writing by hand each variable, as we've done above, we can further automate the task by telling `R` that there is a pattern to how variables are named, and then `R` does the work for us. 
+
+```{r}
+# automated code using starts_with(), contains(), or ends_with()
+automat_summarise_2 <- df_allbus %>% 
+    summarise(across(starts_with("pv") & !ends_with("_fct"), # we have to exclude the factors or the code breaks! 
+                                list(mean= mean,
+                                     sd = sd), na.rm=TRUE) # closes the across() 
+                                ) # closes the summarise()
+automat_summarise_2
+```
+
+You will notice that for object `automat_summarise_2` we've slightly changed the code from `automat_summarise_1`, not only the specification where to perform the operation - see across(starts_with(...)) - but also the inside the list(...). Both ways work!
+
+We now specify `na.rm = TRUE` not after each function, but after the whole function list. This applies the argument na.rm to all functions. Be warned, however, that this only works because both `mean()` and `sd()` have that argument. Otherwise the code would fail!
+
+
+```{r}
+# automated code using starts_with(), contains(), or ends_with()
+automat_summarise_3 <- df_allbus %>% 
+    summarise(across(starts_with("pv")& !ends_with("_fct"), 
+                                list(mean= mean,
+                                     sd = sd), na.rm=TRUE,
+                     .names="result_{.fn}_{.col}") # closes the across() ## controls the labeling of output variables
+                                ) # closes the summarise()
+automat_summarise_3
+```
+
+# Bonus tipp: Reoder values into a readable format with pivot
+
+We cannot go into detail, but the following pattern is often helpful:
+pivot_longer, separate, pivot_wider
+
+[Pivoting introduction](https://r4ds.had.co.nz/tidy-data.html#pivoting)
+
+```{r}
+
+compact_table <- automat_summarise_2 %>% 
+  pivot_longer(everything()) %>% 
+  separate(name, sep = "_", into = c("variable", "statistic")) %>% 
+  pivot_wider(names_from = statistic, values_from = value)
+
+automat_summarise_2
+
+compact_table
+
+```
+
+We can also be in control of the output by instructing `R` how to name resulting columns. When `R` uses the function  `summarise()` it performs an operation on an original variable and displays a resulting variable. When we conduct analyses ourselves we might want to be precise with how we term the resulting columns.  
+
+# mutate() across()
+
+We can also use across() to great effect within mutate to change variables en masse.
+Again, we select variables with selector statements and then supply a function (or many, but that is rarer in mutate).
+
+## Use case 1: Rounding
+
+
+```{r}
+
+compact_table %>% 
+  mutate(across(
+    where(is.numeric), # selector because we can only round numeric vars
+    round, 2
+  ))
+
+```
+
+## Use case 2: z-standardization
+
+```{r}
+standardized_df <- df_allbus %>% 
+  select(sex_fct, german_fct, ep01:ep06) %>% 
+  mutate(across(where(is.numeric),
+                scale))
+
+standardized_df
+```
+
+Did it work? Well, let us test my calculating mean and sd
+
+```{r}
+
+standardization_test_df <- standardized_df %>% 
+  summarise(across(where(is.numeric), list(mean = mean, sd = sd), na.rm=TRUE)) %>% 
+  mutate(across(where(is.numeric), round, 10)) # We are also rounding, because the mean is sliiiiiiightly off otherwise
+
+standardization_test_df
+
+```
+
+## Use case 3: Inverting items in bulk
+
+```{r}
+# Remember our flip_item() function? 
+# Feeding custom functions into across is where the magic happens!
+flip_item <- function(x, min_score = min(x, na.rm = TRUE), max_score = max(x, na.rm = TRUE)){
+  ((x-min_score)*-1)+max_score
+}
+df_allbus %>% 
+  select(pa02a, pa17, ep01) %>% 
+  mutate(across(c(pa02a, pa17, ep01),
+                flip_item,
+                .names = "{.col}_inv") # adding a custom name copies the inverted variable!
+         ) %>% 
+  select(order(colnames(.))) # Sorting so that each original and inverted are side by side
+
+
+```
+
+
+# Purrr...ing
+
+The purrr package makes it easy to use functional programming techniques in R.
+It simplifies many repetitive processes and makes for-loops almost completely obsolete.
+
+The core of purrr is the set of map functions. They are more consistent and convenient versions of the *apply family function in base R.
+
+Map functions take a vector (or list or dataframe) and a function as input. They then apply the function to all elements of the vector. 
+
+## Use case 1: "Vectorizing" functions
+
+Sometimes, we want to transform a vector with a function that is not "vectorized". In other words, the function can transform single values, but not whole vectors. Or sometimes, functions can work on vectors, but the result is not what we want.
+
+Let's simulate a bit of data with map_dbl(). We create a vector defining four groups, each with different means.
+Then we simulate normal distributed random data with those means.
+
+Note that we use map_dbl(), because the output is a numeric (i.e., double) vector.
+We also have to supply each element of the input vector `sim_var_means` to the second argument of rnorm (the mean).
+Thus we use the formula shorthand ~ and supply the value with `.x`.
+
+Bonus Tipp: The pattern shown here is also helpful if we want to add a bit of random error to a variable. Just add a smaller sd to rnorm.
+
+```{r}
+
+simulated_groups_df <- tibble(
+  sim_var_means = rep(1:4, each = 1000),
+  groups = factor(sim_var_means),
+  sim_var = map_dbl(sim_var_means, ~rnorm(1, .x))
+)
+
+
+simulated_groups_df %>% 
+  ggplot(aes(sim_var, color = groups))+
+  geom_density()
+
+# Hint: If the wobbly curves irritate you, increase the number of cases above
+# With each=10000, the curves get considerably more "normal" :)
+
+
+```
+
+## Use case 2: Calculating separate models for different groups
+
+Mapping is ideal if we want to calculate many different models.
+
+(The example is shamelessly stolen from [*R for Data Science*](https://r4ds.had.co.nz/iteration.html#shortcuts) )
+
+```{r}
+# We split() the dataframe into three by a group variable Species.
+# Then we apply the same linear model to each group dataframe and save the results in a list
+
+list_of_regression_results <- iris %>% 
+  split(.$Species) %>% 
+  map(~lm(Petal.Length ~ Sepal.Width+Sepal.Length, data = .x))
+
+
+# Next we apply summary() to each regression result in that list
+# And then we extract the element "r.squared" (i.e., the model fit) from each regression
+list_of_regression_results %>% 
+  map(summary) %>% 
+  map_dbl("r.squared")
+
+# Apparently, the flower petals in setosa irises are largly uncorrelated in length with the sepal (the green leafy bits under the flower)
+# For the other two Species, much variance is explained, however!
+```
+
+## Use case 3: Analyses with changing parameters
+
+Often we want to explore if our results depend on specific researcher choices. 
+
+Let us generate a skewed, long tailed distribution with an [ex-gaussian function](https://en.wikipedia.org/wiki/Exponentially_modified_Gaussian_distribution).
+(Basically a normal distribution squared. The distribution is common for reaction time data, for example.)
+
+The we calculate the mean, but we trim more and more data from each end with the "trim" argument. By mapping we can easily explore how the mean changes. As a comparison, I have also added the median.
+
+Again, note that we use map_dbl, because we want a numeric output vector. And I use the formula shorthand ~ because we supply data to the trim argument with ".x".
+
+```{r}
+
+ex_gaussian <- rnorm(1000, mean = 2) ** 2
+
+
+tibble(
+  trim_parameter = seq(0, 0.2, by= 0.025),
+  trimmed_mean = map_dbl(trim_parameter, ~mean(ex_gaussian, trim = .x)),
+  median = median(ex_gaussian)
+) %>% 
+  ggplot(aes(trim_parameter, trimmed_mean))+
+  geom_line(aes(color = "mean"))+
+  geom_hline(aes(yintercept = median, color = "median"))
+
+```
+
+
+# Paramterized documents
+
+Parameterized documents are introduced using an example from the instructors' own work. Here only a brief example. 
+
+Paramterized documents are extremely powerful when you want to avoid performing both analyses and writing text for separate variables or operations. Knowing of this approach is especially helpful for writing data-driven reports. 
+
+Paramters are nothing else than variable-like elements of a meta-data. The meta-data is usually the document itself, or the data frame itself that you want to work with. For instance, say, you want to write a brief report that summarizes, and describe each variable in your data set. Rather than writing by hand the same report over and over again while only changing it slightly, you can think of instructing `R` to do that for you. 
+
+You need to think of your report as having a data-frame like structure. What from your structure will vary and what will be identical. The parameter then is that what varies from one iteration to another. 
+
+So, let's say we want to do with the four economic situation variables `ep...` what we've done with the `pv...` variables, to summarise them. But, we want a separate document for each. 
+
+For that, we need to look in this Markdown all the way up, at the yaml of this document. There we see lines introduced with *params:*. That is where we specify which element in the Markdown document should be treated as a paramter. The nice thing of it is that once we've done that, we can apply what we've seen in session "31_text_tables_plot", and embed in the text the parameter! See below.
+
+```{r}
+# we set the paramter as a variable for the data frame
+var <- params$var 
+
+# uses the paramter in the code below
+automat_param_1 <- df_allbus %>% 
+    summarise(across(c(var), 
+                                list(mean= ~mean(.,na.rm=TRUE),
+                                     sd= ~sd(., na.rm=TRUE)) 
+                                ) # closes the across() 
+                                ) # closes the summarise()
+automat_param_1
+
+```
+
+**NOTE**: This version looked at variable: ``r var``. To knit (produce) a document that looked at a different variable press the "knit with parameters" button from above, next to the save and magnify symbols!
+
+
+# Exercise
+
+Use `group_by()`, `mutate()` and `summarise()` in operating across voting intention items and economic situation items. 
+
+Consider for instance, 
+- what grouping variable is interesting for you
+- in what way you want to combine your variables (rather than the average score, try combining differently this time)
+- what data aggregation operations you are interested in (try something else than mean and sd this time) and finally
+- can you think of a way to make all of this using paramters?
+
+```{r}
+
+```
+

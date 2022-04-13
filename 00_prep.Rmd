@@ -1,0 +1,142 @@
+---
+title: "00_Data preparation"
+author: "Adrian Stanciu & Ranjit Singh"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+```{r, echo=FALSE, include=FALSE}
+## code to set up the cran mirror
+## needed to download needed packages into R
+
+#RS# Defining the cran mirror might be a bit overkill. I never did that one in RStudio ;)
+
+r <- getOption("repos")
+r["CRAN"] <-"https://cloud.r-project.org/"
+options(repos=r)
+
+## code that first checks whether a package is required and installed,
+## and if not it will install it 
+
+#RS# Do we have to add require() inside the if code block? I mean, we use library below anyway to load everything.
+
+# package haven is usefull to read spss .sav data formats
+if (!require(haven)) {
+    install.packages("haven")
+    require(haven)
+}
+# package tidyverse contains a series of helpful functions that 
+# are used to filter, group, manipulate data
+if (!require(tidyverse)) {
+    install.packages("tidyverse")
+    require(tidyverse)
+}
+
+# package dplyr contains yet another set of helpful functions
+if (!require(dplyr)) {
+    install.packages("dplyr")
+    require(dplyr)
+}
+
+## once packages are installed, they need to be activated,
+# otherwise the user has no access to the functions included
+
+library("haven")
+library("tidyverse")
+library("dplyr")
+```
+
+___
+# Retrieve data
+
+First, one should register at GESIS website and then download the `.spss` or `.dta` file from [this](https://search.gesis.org/research_data/ZA5273) page.
+
+Note that you can use the same login that you used to register for this course.
+
+# Import data
+
+<!-- #RS# I would suggest we simply put data in the same folder as the .rmd. 
+Or into a data folder. That way, we do not need to deal with file paths.
+
+However, if you want to show file paths, consider to use file.path()
+path_df <- file.path("C:", "Users", "stancian", "OneDrive", "PostDoc GESIS", "Lehre", "Workshop GESIS", "data")
+
+That way, the path is OS independent
+-->
+
+Download and save the data on your machine in a designated folder. Identify the path of that folder, and copy it. In the next step, we set the path to that folder as an `R` code object. 
+
+Windows and MacOS machines recode paths to folders and files slightly different. Be sure to use the code that reflects your case.
+
+```{r}
+# in-between "..." delete my path and paste the path of your folder where the data is stored on your machine
+
+## code for Windows
+path_df <- "C:\\Users\\stancian\\OneDrive\\PostDoc GESIS\\Lehre\\Workshop GESIS\\data\\"
+
+path_df <- file.path()
+
+## code for MacOS
+# path_df <- "/Users/stancian/OneDrive/PostDoc GESIS/Lehre/Workshop GESIS/data/"
+
+```
+
+Once the path was designated, now are are ready to read the data set into `R`. For that, we will work with the `.sav` data, but there are multiple ways to how once can read a data set into `R`. 
+
+<!---In the code below, we,--->
+<!---use the function "read_spss()" from the package "haven"--->
+<!---then we attach the designated path to our data with the function paste0()--->
+<!---and finally we indicate the full name of the data we want to import into R --->
+
+```{r}
+allbus_df <- haven::read_spss(paste0(path_df, "ZA5273_v1-0-0.sav"))
+```
+
+# Subset data
+
+So far, we have imported the contents of the entire dataset into `R`. But, we want to have a smaller dataset with only the variables of interest to our work. This can be done with the `subset` function.
+
+The list of variables we want to include in the example dataset are:
+
+- `sex`: RESPONDENT: SEX
+- `age`: RESPONDENT: AGE
+- `work`: RESPONDENT: CURRENT EMPLOYMENT STATUS
+- `german`: GERMAN CITIZENSHIP?
+- `ep01`: CURRENT ECONOMIC SITUATION IN GERMANY
+- `ep03`: RESPONDENT OWN CURRENT FINANCIAL SITUATION
+- `ep04`: ECONOMIC SITUATION I.GERMANY IN ONE YEAR
+- `ep06`: RESPONDENT OWN FINANCIAL SITUATION IN ONE YEAR
+- `pa01`: SELF-PLACEMENT ON LEFT-RIGHT CONTINUUM
+- `pa02a`: POLITICAL INTEREST, RESPONDENT(ORDINAL)
+- `ls01`: OVERALL LIFE SATISFACTION
+- `pa17`: IMMIGRANTS GOOD FOR GERMAN ECONOMY
+
+Also, 3 items describing the probability to vote for the three parties forming the current German Government.
+
+- `pv20`: PROBABILITY: VOTE FOR SPD
+- `pv21`: PROBABILITY: VOTE FOR FDP
+- `pv22`: PROBABILITY: VOTE FOR THE GREENS
+
+```{r}
+# populates a vector with the list of variables from the original data set that we want to include in the example dataset
+list_variables <- c("sex","age","work","german","ep01","ep03","ep04","ep06","pa01","pa02a","ls01","pa17","pv20","pv21","pv22")
+
+# subsets (selects) from the original data set only the variables we want to keep
+df <- allbus_df %>% dplyr::select(all_of(list_variables))
+
+# show the first 6 rows in the short data set
+head(df)
+```
+
+Let us now save the short data into varying file formats, so that we can use them for illustration purposes later on during the seminar.
+
+```{r}
+## save into R native format
+#saveRDS(df, "allbus_short.Rds")
+
+## save into SPSS native format
+#write_sav(df, "allbus_short.sav")
+```
+
+
+

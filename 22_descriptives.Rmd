@@ -1,0 +1,670 @@
+---
+title: "22_Descriptives"
+author: "Adrian Stanciu & Ranjit Singh"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 4
+    toc_float: true
+---
+
+
+```{r, echo=FALSE, include=FALSE}
+## code to set up the cran mirror
+## needed to download needed packages into R
+r <- getOption("repos")
+r["CRAN"] <-"https://cloud.r-project.org/"
+options(repos=r)
+
+## code that first checks whether a package is required and installed,
+## and if not it will install it 
+
+# package haven is usefull to read spss .sav data formats
+if (!require(haven)) {
+    install.packages("haven")
+    require(haven)
+}
+# package tidyverse contains a series of helpful functions that 
+# are used to filter, group, manipulate data
+if (!require(tidyverse)) {
+    install.packages("tidyverse")
+    require(tidyverse)
+}
+
+# package dplyr contains yet another set of helpful functions
+if (!require(dplyr)) {
+    install.packages("dplyr")
+    require(dplyr)
+}
+
+# package psych contains functions to calculate cohen's d and other useful
+# social science coefficients and tests
+if (!require(psych)) {
+    install.packages("psych")
+    require(psych)
+}
+# data visualization package
+if (!require(ggplot2)) {
+    install.packages("ggplot2")
+    require(ggplot2)
+}
+
+## once packages are installed, they need to be activated,
+# otherwise the user has no access to the functions included
+
+library("haven")
+library("tidyverse")
+library("dplyr")
+library("tidyverse")
+library("psych")
+library("ggplot2")
+
+# Loading some functions that help us deal with labelled data
+source("helper_functions.R")
+
+```
+
+
+```{r include=FALSE}
+# LOAD DATA
+
+# Load data with SPSS labelled  variables
+df_allbus_spss <- readRDS("allbus_short.Rds")
+
+# save the variable and value labels
+allbus_labels <- register_labels(df_allbus_spss)
+
+# create native R dataframe
+df_allbus <- naturalize_labelled_df(df_allbus_spss)
+
+# remove the SPSS style dataframe (optional)
+rm(df_allbus_spss)
+```
+
+___
+Descriptive statistics are one way of looking at the data and exploring or understanding their patterns. This set of statistics is descriptive because, well, it only describes the data without performing any tests, that fits rather in the category inferential statistics. 
+
+For this seminar we can of course not cover all the possibilities. We focus on 
+
+- frequencies
+- correlations
+- and visualizing data
+
+# Frequencies
+## Basics
+
+We've covered frequencies in the session before. These help to understand how the data is structured, and in fact we can think of it as a form of data aggregation, at least in `R` terms. 
+
+Let us once more calculate frequencies for some of the variables in the ALLBUS data set. And let us also inspect the data frame and get an quick overview of its contents.
+
+```{r}
+# insepcts the data frame
+glimpse(df_allbus)
+```
+If we look at the factor versions "_fct", we can alrady guess that some variables are more categorical (e.g., `work_fct`), while others are metric (e.g., `age`), or (pseudo-)metric (e.g., `ep01_fct`). Some variables remain cryptic, however. Look at `pa01_fct`. What are those letters?
+
+Fortunately, we have saved all variable labels to `allbus_labels`! We can look into that data frame manually, or just use `fetch_var_lab()` (but without the suffix). 
+
+```{r}
+
+fetch_var_lab("pa01", allbus_labels)
+
+# Fun fact: The variable has letters as value labels, because the ALLBUS shows respondents a showcard with letters instead of numbers for left-right orientation
+
+```
+Let us check the frequencies of these two variables.
+
+First `ls01`, which is overall life satisfaction:
+
+```{r}
+fetch_var_lab("ls01", allbus_labels)
+```
+
+
+```{r}
+# frequencies for ls01
+
+freq_ls01 <- df_allbus %>% 
+  group_by(ls01) %>%  # Note how we group by the variable itself, thus making unique responses to groups!
+  summarise(n=n()) %>%
+  ungroup() %>%
+  mutate(rel_freq = 100*n / sum(n),
+           cum_freq = 100*cumsum(rel_freq/sum(rel_freq))) 
+freq_ls01
+```
+
+A quick note on `ungroup()`. We ungroup before `mutate()`, because with groups, `sum()` would only sum up within a group!
+However, that is actually unnecessary here, because summary() always removes one "layer of grouping". Here it has removed the grouping by `ls01`. Still, we recommend to `ungroup()` manually, because it is easy to get confused with several grouping variables.
+
+```{r}
+# Note how the output is no longer grouped!
+is_grouped_df(freq_ls01)
+```
+
+
+```{r}
+# Bonus tipp: We can rename variables with their var labels in the allbus_labels df!
+# This is great for reports or graphs.
+# The code is a bit strange, but it shows how helpful such fetch functions are :)
+
+freq_ls01 %>% 
+rename_with(.cols = ls01, ~fetch_var_lab(.x, allbus_labels)) 
+
+```
+
+Now let us do the same for work (i.e., current employment status).
+
+```{r}
+# frequencies for work
+
+freq_work <- df_allbus %>% 
+  group_by(work_fct) %>% # Note that we use work_fct instead of work!
+  summarise(n=n()) %>%
+  mutate(rel_freq = 100*n / sum(n),
+           cum_freq = 100*cumsum(rel_freq/sum(rel_freq))) %>%
+  ungroup()
+freq_work
+```
+
+<!--- #RS# 
+I hope you don't mind, but I think explaining that here goes to far.
+Especially since plotting is complex enough.
+
+If you want to keep it in, I would prefer a rewritten version in tidyverse style with map() instead of lapply().
+
+
+## Outlook: Automation with `purrr::map()`
+
+Repetetive code is often easily automated in R. 
+Imagine we want frequency tables for all variables.
+
+That can be easily done with `map()`, which we will discuss tomorrow. In short, the family of map functions from `purrr::` applies a function to each element in a vector or dataframe or list. 
+
+Here, we enrich the allbus_labels dataframe, by adding frequency tables!
+
+```{r}
+
+# Function that takes a vector and a name and creates a frequency table
+generate_freq_tab <- function(variable){
+  tibble(variable) %>% 
+    group_by(responses = variable) %>% 
+    summarise(abs_freq= n()) %>% 
+  mutate(
+    rel_freq=abs_freq*100/sum(abs_freq), 
+    cum_rel_freq = 100*cumsum(rel_freq/sum(rel_freq))
+  )
+}
+
+# Apply the function to all variables listed in allbus_labels
+# Note how we use allbus_labels for the variable names, but then draw data from df_allbus!
+
+labels_and_tables <- allbus_labels %>% 
+  select(-value_labels) %>% 
+  mutate(
+    frequency_tabs = map(paste0(var_name, "_fct"),
+                          ~ generate_freq_tab(df_allbus[[.x]]))
+  )
+
+# If we want to access the frequency table, we can simply unnest() it.
+# This creates a long-format data frame, ideal for further analyses
+
+# This is what it looks like for the variable "work":
+
+labels_and_tables %>% 
+  filter(var_name == "work") %>% 
+  unnest(frequency_tabs)
+
+```
+
+--->
+
+
+# Descriptive stats in general
+
+## Correlations
+
+### Basics 
+1. For metric variables
+
+This is the Pearson's correlation that we mostly think of when we want to inspect the correlation between variables. For such correlations we should only use continuous observations.
+
+The command to use is `cor()`.
+
+Let us use the ALLBUS data and inspect the correlation coefficient between `ep03` (Respondent's current financial situation) and `ls01` (Overall life satisfaction of respondent).
+
+```{r}
+# Pearson's r correlation coefficient
+cor(df_allbus$ep03, # defines variable 1
+                           df_allbus$ls01, # defines variable 2
+                           method="pearson", # defines which correlation type to calculate
+                           use="complete.obs") # specifies that missing data should not be considered
+
+```
+
+<!--- I removed formal tests because this is part of the next lesson 23--->
+
+
+
+## Effect size Cohen's d
+
+Measures of effect size in general are informative on top of reporting the p-value (significance test) of your test. Effect size measures inform about how meaningful a found effect is given the observed data. 
+
+Perhaps the most common effect size measure is Cohen's _d_. A nice visualization tool on intepreting and understanding Cohen's _d_ and its relation to data can be seen [here](https://rpsychologist.com/cohend/).
+
+Though, Cohen did not intend on suggesting thresholds for interpreting observed _d_ values, it has become sort of a standard procedure to evaluate the strength of an effect according to these thresholds:
+
+- small effect: _d_ >= 0.2
+- medium effect: _d_ >= 0.5
+- large effect: _d_ >= 0.8
+
+Remember that Cohen's _d_ is an effect size measure for experimental data, otherwise said for comparisons of means across groups.
+
+Let us pretend in the ALLBUS data we have experimental information (we've conducted an experiment of sorts) on the `pv22` "Probability to vote for the GREEENS if elections were held next week" and we want to compare men and women, thus the "treatment" condition is whether someone is a female or a man (`sex`).
+
+```{r}
+# calculates cohen's d for the group comparison men~women on intention to vote for greens
+cohen_d_sex_pv22 <- psych::cohen.d(df_allbus$pv22,
+                                   group=df_allbus$sex) 
+
+cohen_d_sex_pv22
+```
+Results show that there is a small effect (as seen in the column "effect"). The difference between men and women in their intention to vote for the Greens at the next German elections is small. 
+
+
+
+
+# Data visualization
+
+Data visualization in `R` can be done in multiple ways, in base `R` (where you do not need to install extra packages) or using a multitude of extra packages. 
+
+Luckily there is one particular package that is so powerful that you'd only need this one for everything you'd desire - this package is `ggplot2`. 
+
+See [here](https://ggplot2-book.org/) for one guide on how to make the best of this data visualization package. 
+
+## Histogram
+
+Simple histogram.
+
+However, this is not yet very useful, because we do not know what the bars stand for.
+
+```{r}
+# creates a simple histogram
+df_allbus %>% # defines what data to use
+  ggplot(aes(x=pv22)) + # activates the ggplot command and specifies the x: axis
+  geom_histogram() # indicates what plot to create
+
+```
+
+So we use the "_fct" variable. However, if we use `geom_histogram()` for factors, we have to add `stat="count"`!
+
+```{r}
+# creates a simple histogram for a factor variable
+df_allbus %>% 
+  ggplot(aes(x=pv22_fct)) + # note _fct!
+  geom_histogram(stat="count") # For factors we need to tell ggplot() to count cases with stat="count"
+
+```
+
+### Histogram for grouped variable
+
+We can add dimensions to our data by defining different colors. For histograms and barcharts, we use the `fill` aesthetic.
+
+
+```{r}
+# adds a grouping variable to the histogram plot
+df_allbus %>% 
+  ggplot(aes(pv22_fct,
+             fill=sex_fct)) + # Note that fill is INSIDE aes(). This adds it as a data dimension.
+  geom_histogram(stat = "count")
+
+# Note that we again use the factor variables. This supplies us with labels for the x-axis and for the fill legend!
+
+```
+
+However, the plot still looks strange. We usually do not want stacked bars!
+So we simply add an argument to `geom_hist()`: `position = "dodge"`.
+
+(Bonus Tipp: The same argument works great for `geom_bar()` as well!)
+
+```{r}
+# adds a grouping variable to the histogram plot
+df_allbus %>% 
+  ggplot(aes(pv22_fct,
+             fill=sex_fct)) +
+  geom_histogram(stat = "count",
+                 position = "dodge") # Instead of stacked bars, we have bars beside each other
+```
+
+More tips on building historgrams can be found [here](https://r-charts.com/distribution/histogram-group-ggplot2/).
+
+### For continuous variables: geom_density()
+
+The "better" histogram for continuous values: `geom_density()`.
+
+Here we see the age distributions for different employment stati.
+
+```{r}
+
+df_allbus %>% 
+  ggplot(aes(age, color = work_fct))+
+  geom_density()
+
+# Tipp: The unit on the y-axis is the "density" in the sense 
+#       that if we integrate the area under each curve, we get 1 (i.e., all the cases).
+
+```
+
+
+## Scatter plots (bivariate plots)
+
+These type of plots are useful for visualizing correlations and regression trends, for instance. 
+
+Scatter plot
+
+```{r}
+# creates scatter plot for life satisfaction (ls01) and age
+df_allbus %>%
+  ggplot(aes(x = ls01_fct,
+             y = age)) +
+  geom_point()
+
+```
+
+However, variables with discrete response options often result in hard to read scatterplots.
+
+Solution: `geom_jitter()` to add some random movement to points.
+
+
+```{r}
+# creates scatter plot for life satisfaction (ls01) and age
+df_allbus %>%
+  ggplot(aes(x = ls01_fct,
+             y = age)) +
+  geom_jitter() # geom_jitter() instead of geom_point()
+
+# Bonus tipp: You can also add alpha = .5 to geom_jitter() for some transparency
+
+```
+
+For two likert-scales, we can also use `geom_count()`. It works like `geom_point()`, but if several points have the same coordinates, the point simply gets bigger.
+
+Let us look at `ep03_fct` (financial situation) and `pa02a_fct` (political interest).
+
+```{r}
+df_allbus %>% 
+  ggplot(aes(pa02a_fct, ep03_fct))+
+  geom_count()
+```
+
+## Trends.
+
+Own financial situation `ep03` and life satisfaction `ls01`.
+
+Let us add a linear trendline with `geom_smooth(method = "lm")`.
+
+```{r}
+df_allbus %>% 
+  ggplot(aes(ep03, ls01))+
+  geom_count()+
+  geom_smooth(method = "lm") # note that method = "lm" creates a linear trendline via OLS regression
+```
+
+Via color, we can add grouping!
+
+```{r}
+df_allbus %>% 
+  ggplot(aes(ep03, ls01, color = sex_fct))+
+  geom_jitter(alpha = 0.1)+ # we switch to jitter with low alpha, because geom_count is bad for color groups
+  geom_smooth(method = "lm") 
+```
+
+### Smooth loess-curves
+
+If we omit `method = "lm"`, `geom_smooth()` creates smoothed curves. Usually via local polynomial regression fitting (LOESS).
+
+Here we see left-right orientation predicting political interest, split by sex.
+(Political interest: Lower value, higher interest!)
+
+```{r}
+# displays trend  lines
+df_allbus %>%
+  ggplot(aes(pa01, 
+             pa02a,
+             color=sex_fct)) +
+  geom_jitter(alpha = 0.1) + 
+  geom_smooth()
+
+```
+
+### Bonus Tipp: Factor labels and numeric trendlines!
+
+geom_smooth() prefers numeric variables. It is a regression after all.
+However, if we still want labels, we can mix our variables! "_fct" variables for geom_jitter() and numerical variables for geom_smooth()
+
+```{r}
+
+df_allbus %>%
+  drop_na(pa01, pa02a) %>% # dropping NAs in the x and y variable. Otherwise they get plotted ;)
+  ggplot(aes(color=sex_fct)) + # aes() in ggplot() is "inherited" by all geoms
+  geom_jitter(aes(pa01_fct, pa02a_fct), alpha = 0.1) + # _fct variables here to establish axis labels!
+  geom_smooth(aes(pa01, pa02a)) # numerical variables for regression
+
+
+```
+
+
+___
+# Exercises
+
+## 1
+
+<!--- 
+Der Punkt ist sicher richtig. Aber ich bin mir unsicher ob wir die Zeit nicht erstmal sinnvoller für ggplot nutzen sollten.
+Ich würde sowas eher als kurze info mit zu cohen's d oben packen.
+--->
+
+Though this does not apply only to calculating Cohen's _d_, let us use this as an example. As you will learn more about `R` and the `R` community, you will get to realize that one thing (operation) may be done in multiple ways. A quick search on `R` documentation reveals two additional packages that have functions to calculate Cohen's _d_. 
+
+Use the packages `lsr` and `effsize` and calculate the Cohen's _d_ for the same "experimental" setting as above, `sex` as the grouping variable and `pv22` as the outcome of interest. 
+
+Remember to first install (if needed) the packages and instruct `R` from which package to call the function to calculate Cohen's _d_!
+
+Read the package instructions before applying the functions, otherwise you might get some weird results that can be difficult to explain.
+
+Read [here](https://www.rdocumentation.org/packages/lsr/versions/0.5.2/topics/cohensD) for `lsr` package. 
+Read [here](https://www.rdocumentation.org/packages/effsize/versions/0.8.1/topics/cohen.d) for `effsize` package.
+
+```{r, warning=FALSE}
+## installs packages
+if (!require(lsr)) {
+    install.packages("lsr")
+    require(lsr)
+}
+if (!require(effsize)) {
+    install.packages("effsize")
+    require(effsize)
+}
+
+
+## activates packages
+library(lsr)
+library(effsize)
+
+## calculates Cohen's d with lsr package
+###
+## calculating Cohen's d this ways requires that you first manipulate the data, such that 
+lsr_cohen_d_wrong <- lsr::cohensD(x=df_allbus$sex,
+                            y=df_allbus$pv22)
+
+
+## the richt way, which requires extra work
+temp_lsr_df <- df_allbus %>% 
+  # selects only the variables of interest  
+  select(c("sex","pv22")) %>% 
+  # adds a unique identifier columns (useful for next step)  
+  mutate(rn=row_number()) %>% 
+  # transforms data into wide format, such that one column is for men and one for women  
+  pivot_wider(names_from = sex, 
+                values_from = pv22)
+
+## now calculates cohen's d with lsr package
+lsr_cohen_d_right <- lsr::cohensD(temp_lsr_df$`1`,temp_lsr_df$`2`)
+
+## calculates Cohen's d with effsize package
+###
+## like with the lsr package, the data needs to be transformed into wide format
+temp_effsize_df <- df_allbus %>% 
+  # selects only the variables of interest  
+  select(c("sex","pv22")) %>% 
+  # adds a unique identifier columns (useful for next step)  
+  mutate(rn=row_number()) %>% 
+  # transforms data into wide format, such that one column is for men and one for women  
+  pivot_wider(names_from = sex, 
+                values_from = pv22)
+
+## now calculates Cohen's d with effsize package
+effsize_cohen_d_right <- effsize::cohen.d(temp_effsize_df$`1`, temp_effsize_df$`2`,
+                                          na.rm=TRUE)
+
+```
+
+Inspect if all approaches give identical results.
+
+```{r}
+# psych package
+cohen_d_sex_pv22$cohen.d[2]
+
+# lsr package
+lsr_cohen_d_right
+
+# effsize package
+effsize_cohen_d_right$estimate
+```
+
+## 2
+
+Let's imagine we expect that a specific political orientation associates with an intention to vote for one of the three parties forming the current German government. We might also expect that an intention to vote for one of the three parties might be aggregated into an intention to vote for the current government. 
+
+So, let's say, we want to create a scatter plot with trend lines for inspecting association between `pa01` (Self-placement on the left-right political spectrum) and an index termed "Intention to vote for the current German government" that is formed by aggregating the intentions to vote for SPD (`pv20`), FDP (`pv21`), and the Greens (`pv22`).
+
+Then we want to group observations after the variable `work` (Participant employment status).
+
+
+```{r}
+## to be deleted, this is key to exercise
+exer_22_longdf <- df_allbus %>% 
+  mutate(vote_int=(pv20+pv21+pv22)/3) %>% # calculates aggregated index
+  select(work,pa01,vote_int) %>% # creates a short data frame with the mentioned variables
+  group_by(work) # groups for work
+
+# inspects the data frame
+head(exer_22_longdf)
+  
+# creates plot with trend lines
+exer_22_plot_1 <- exer_22_longdf %>%
+  ggplot(aes(x=pa01,
+             y=vote_int)) + 
+  geom_point() +
+  geom_smooth()
+
+# adds grouping factor "work"
+exer_22_plot_2 <- exer_22_longdf %>%
+  ggplot(aes(x=pa01,
+             y=vote_int,
+             fill=as.factor(work))) + 
+  geom_point(aes(x=pa01,
+             y=vote_int,
+             color=as.factor(work)))
+
+# this is not very informative,
+# so in this case we might want to split the plots
+# that is, to create separate panels
+# RS# (!) facettes are covered a day later
+
+exer_22_plot_3 <- exer_22_longdf %>%
+  ggplot(aes(x=pa01,
+             y=vote_int,
+             color = as.factor(work))) + 
+  geom_point() + 
+  geom_smooth(method = "lm")
+
+```
+
+```{r}
+### calls the plots
+# simple scatter plot
+exer_22_plot_1
+# with added grouping variable
+exer_22_plot_2
+# with split panel plot
+exer_22_plot_3
+```
+
+<!--- vorschlag für einfachere Übungen --->
+# Exercises
+
+## 1 Create a histogram
+
+Plot a histogram for "Current economic situation in Germany" ep01.
+If you cannot interpret the x-Axis: Perhaps you could use another version of the variable?
+
+```{r}
+df_allbus %>% 
+  ggplot(aes(ep01_fct))+
+  geom_histogram(stat="count")
+```
+
+Perhaps the histogram is different for men and women? 
+
+```{r}
+df_allbus %>% 
+  ggplot(aes(ep01_fct, fill = sex_fct))+
+  geom_histogram(stat="count", 
+                 position = "dodge")
+```
+
+## 2 Create a scatterplot
+
+Create a scatterplot with `geom_point()` for age `age` and the probability to vote green `pv22`.
+
+```{r}
+df_allbus %>% 
+  ggplot(aes(age, pv22))+
+  geom_point()
+
+```
+
+Not very informative, is it? What about another geom instead of geom_point?
+
+```{r}
+
+df_allbus %>% 
+  ggplot(aes(age, pv22))+
+  geom_jitter(alpha = 0.2)
+
+```
+
+## 3 Add a trendline!
+
+Still not ideal? Maybe add a linear trendline? Or a smooth curve?
+
+```{r}
+df_allbus %>% 
+  ggplot(aes(age, pv22_fct))+
+  geom_jitter(alpha = 0.2)+
+  geom_smooth(aes(y = pv22))
+
+```
+
+Does that pattern depend on employment status `work_fct`?
+
+Tipp: If the trendlines become hard to see in front of the points, add alpha = 0.2 to geom_jitter() or geom_point()!
+
+```{r}
+df_allbus %>% 
+  ggplot(aes(age, pv22_fct, color = work_fct))+
+  geom_jitter(alpha = 0.2)+
+  geom_smooth(aes(y = pv22))
+```
+

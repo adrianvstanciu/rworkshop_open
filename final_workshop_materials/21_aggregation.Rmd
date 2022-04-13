@@ -1,0 +1,344 @@
+---
+title: "21_Data aggregation"
+author: "Adrian Stanciu & Ranjit Singh"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 4
+    toc_float: true
+---
+
+
+```{r, echo=FALSE, include=FALSE}
+## code to set up the cran mirror
+## needed to download needed packages into R
+r <- getOption("repos")
+r["CRAN"] <-"https://cloud.r-project.org/"
+options(repos=r)
+
+## code that first checks whether a package is required and installed,
+## and if not it will install it 
+
+# package haven is usefull to read spss .sav data formats
+if (!require(haven)) {
+    install.packages("haven")
+    require(haven)
+}
+# package tidyverse contains a series of helpful functions that 
+# are used to filter, group, manipulate data
+if (!require(tidyverse)) {
+    install.packages("tidyverse")
+    require(tidyverse)
+}
+
+# package dplyr contains yet another set of helpful functions
+if (!require(dplyr)) {
+    install.packages("dplyr")
+    require(dplyr)
+}
+
+## once packages are installed, they need to be activated,
+# otherwise the user has no access to the functions included
+
+library("haven")
+library("tidyverse")
+library("dplyr")
+
+# Loading some functions that help us deal with labelled data
+source("helper_functions.R")
+
+```
+
+
+```{r include=FALSE}
+# LOAD DATA
+
+# Load data with SPSS labelled  variables
+df_allbus_spss <- readRDS("allbus_short.Rds")
+
+# save the variable and value labels
+allbus_labels <- register_labels(df_allbus_spss)
+
+# create native R dataframe
+df_allbus <- naturalize_labelled_df(df_allbus_spss)
+
+# remove the SPSS style dataframe (optional)
+rm(df_allbus_spss)
+```
+
+___
+Data aggregation is one way of describing what happens with the data when the goal is to summarize its contents into patterns. When doing research, and seeking for data induced evidence on a hypothesis, for instance, we summarize the data at hand and seek to determine whether that summary is a meaningful one or not. 
+
+# Aggregating vectors
+
+The simplest - and perhaps most intuitive - form of data aggregation is calculating the `mean()` of a set of observations, or the mean over values in a vector of a data frame. But, in dealing with data, one has also encountered other forms of data aggregation, such as:
+
+- standard deviation: `sd()`
+- sum of observations: `sum()`
+- min and max observations: `min()` and `max()`
+
+All these coefficients provide information about patterns in the data. We can call the ALLBUS data and inspect some of its vectors.
+
+To make it easier to follow what we're doing, let us focus on the column `pa02a` and assign each data aggregation coefficient into a separate `R` variable.
+
+```{r}
+# Aggregating pa02a (Political Interest)
+
+
+# mean
+mean_pa02a <- mean(df_allbus$pa02a, na.rm=TRUE)
+mean_pa02a
+# sd
+sd_pa02a <- sd(df_allbus$pa02a, na.rm=TRUE)
+sd_pa02a 
+# sum
+sum_pa02a <- sum(df_allbus$pa02a, na.rm=TRUE)
+sum_pa02a
+# min
+min_pa02a <- min(df_allbus$pa02a, na.rm = TRUE)
+min_pa02a
+# max
+max_pa02a <- max(df_allbus$pa02a, na.rm = TRUE)
+max_pa02a
+```
+
+One other way to get all of this information at once is the command `summary()`, which instructs `R` to calculate each of these separately and return an output containing info on each. 
+
+```{r}
+summary(df_allbus$pa02a)
+```
+
+Are the results the same?
+
+A nice feature of this command, the `summary()` command is that it can process results for different input classes, so not only different types of vectors - see below - but also analyses. 
+
+ALLBUS data contains several vectors, and we might want to inspect all at once. Do you think the `summary()` command will work if we called it on the data frame?
+
+```{r}
+
+```
+
+Be careful when interpreting these aggregated coefficients, as `R` cannot know which observations are continuous and which are categorical. For instance, `sex` is categorical, yet `R` returns the mean! 
+
+Sometimes, we might want to aggregate, or get a summary, of vectors that are not numeric, as we've seen in the example above. The function `summary()` can be used to aggregate also other types of vectors, and even over data structures. 
+
+Let us work with the example data frame we've seen previously. We create a data frame and then we call the function `summary()` on its vectors. 
+
+```{r}
+# creates data frame
+df_1 <- tibble(
+a = c(1, 2, 3, 4),
+b = c(3.4, 4.6, 6.9, 9.2),
+c = c(TRUE, FALSE, FALSE, TRUE),
+d = c("m","f","d","m")
+)
+df_1
+
+# for column c, which is a logical vector
+summary(df_1$c)
+
+```
+
+We also have a factor vector in the example data frame `df_1`, and so we should treat this vector as such, otherwise `R` would treat it as a "regular" character vector. See below.
+
+```{r}
+# as character vector
+summary(df_1$d)
+
+# as factor vector
+summary(factor(df_1$d))
+```
+
+What is the difference between these two, and how do you expect falsely calling a factor a character vector can impact on your work?
+
+Try out the above using the ALLBUS data. 
+Compare summary with the numeric `sex`variable to its factor copy `sex_fct`. Try the same with `german` versus `german_fct`. 
+
+(Tipp: If you do not want to use `naturalize_labelled_df()` in your research, you can always get the same effect as `sex_fct` with `as_factor(sex)`. Please note the underscore "_"! `as.factor()` is native R variables, whereas `as_factor()` is for labelled data.)
+
+
+```{r}
+
+```
+
+# Grouping data
+
+When working with real data, the function `group_by()` from the package `dplyr` is extremely helpful, and your best friend! Remember that calling a function from a specific package should be written as follow `package::function()`. In our example, we have `dplyr::group_by()`. 
+
+What does this function actually do? Well, it groups the data after the levels of a specified variable. Say, you want to aggregate your data - you want to find the mean and standard deviation - separately for men, women, and diverse. The function `group_by()` prepares the data in the background, that is it instructs `R` to create separate data frames based on which you can perform subsequent operations. 
+
+These separate data frames are not seen by you, they are only in the background, and so you need to remember this when working with your data, otherwise you might run into difficulties. The opposite of `group_by()`, or the way to deactivate the grouping of your data is by calling - after you've finished with whatever operations you had to do - the command `ungroup()`. This instructs `R` to now de-activate the separate data frames and go back to the original data frame as the working one. 
+
+Perhaps a step-by-step example can be more instructive. While we are at it, let us use some of the other commands we've used so far. We directly use the ALLBUS data.
+
+Tipp: Grouping is best done with the factor variables "_fct". Thus, the groups are named by labels instead of numbers. However, R can easily group by numerical variables too. This can be useful in some cases as well.
+
+```{r}
+# We first tell R to group after sex
+# If we immediately insepct the outcome, we see nothing different than the original data frame
+grouping_df_1 <- df_allbus %>% group_by(sex_fct)
+
+# this is...
+head(df_allbus)
+
+# ...identical to this
+head(grouping_df_1)
+
+```
+
+This is because we did not **use** this grouping so far, but `R` has kept in its memory this task. It knows that if we are to preform further operations on the data frame `grouping_df_1` then the output will be aggregated (organized) after the categories of the variable `sex_fct`. 
+
+If you are uncertain if a df is grouped, or how, you can print it. Within RStudio you you see a "Groups:" tag above the variable names.
+
+```{r}
+# Print df; Look at the output in the upper left corner!
+grouping_df_1 %>% head(5)
+```
+
+Alternatively, you can check if a dataframe is grouped with `is_grouped_df()`.  
+
+```{r}
+# Is the dataframe grouped?
+grouping_df_1 %>%  is_grouped_df()
+```
+
+You can also list the groups a dataframe has with `groups()`.
+
+```{r}
+# Which groups?
+grouping_df_1 %>% groups()
+```
+
+And lastly, you can list the group levels with `group_keys()`
+
+```{r}
+grouping_df_1 %>% group_keys()
+
+# Note how the groups are named after the original SPSS value labels.
+# Had we used sex instead of sex_fct, we would only see "1" and "2". 
+
+```
+
+# summarise()
+
+## Basic summary by sex
+
+Let us use the grouped dataframe that we have prepared: `grouping_df_1`, which was grouped by `sex_fct`.
+
+```{r}
+grouping_df_1 %>% 
+  summarise(
+    mean_polint = mean(pa02a, na.rm = TRUE),
+    sd_polint = sd(pa02a, na.rm = TRUE),
+    mean_voteSPD = mean(pv20, na.rm = TRUE),
+    sd_voteSPD = sd(pv20, na.rm = TRUE),
+  )
+```
+
+
+```{r}
+# Note that we can also group and summarise in one "Pipe" for the same effect!
+
+df_allbus %>% 
+  group_by(sex_fct) %>% 
+  summarise(
+    mean_polint = mean(pa02a, na.rm = TRUE),
+    sd_polint = sd(pa02a, na.rm = TRUE),
+    mean_voteSPD = mean(pv20, na.rm = TRUE),
+    sd_voteSPD = sd(pv20, na.rm = TRUE),
+    n = n()
+  )
+
+  
+```
+
+
+### Preview: Automation with across()
+
+Listing variables and function manually is a hassle. Often we want to apply a set of aggregation functions to a set of variables in one go. That can be easily done with across(), which we will discuss tomorrow!
+
+However, here a preview, where inspect the `mean` and `sd` of variables `pa02a`, and the three voting intentions for the parties forming the current German government - the columns `pv20` (vote for SPD), `pv21` (vote for FDP), and `pv22` (vote for the Greens).
+
+```{r}
+
+grouping_df_2 <- df_allbus %>% 
+  group_by(sex_fct) %>% 
+  summarise(across(c("pa02a","pv20","pv21","pv22"), 
+                   list(mean= ~mean(.,na.rm=TRUE),
+                        sd= ~sd(., na.rm=TRUE)) 
+  ) # closes the across() 
+  ) # closes the summarise()
+grouping_df_2
+
+```
+
+The code seems confusing, but all we do is tell summarise to look at a set of variables `c("pa02a","pv20","pv21","pv22")`, then then apply a set of functions (`mean` and `sd`) to them.
+Tomorrow we will see how that works in detail.
+
+# Exercises
+
+Let us use what we've learned so far, and attempt to, at the same time, that is in one go, use the functions
+- `group_by()`
+- `rename()`
+- `summarise()`
+- and `mutate()` 
+
+## Exercise 1
+
+Say, we want to aggregate over three variables, `ep03` (Current financial situation of study participant), `ep06` (Financial situation of study participant in one year), and `ls01` (Overall  life satisfaction of participant), BUT we want to have the results separately for younger (aged 45 and younger) and older (aged over 45) study participants. 
+
+We want once more the `mean` and `sd`. Note: Make sure no missing values are displayed in the output.
+
+You can try to modify the `across()` syntax from earlier. However, it might be easier to write each aggregation manually instead: `summarise(var1_mean = mean(var_1, na.rm=TRUE))`.
+
+Hint: You can write logical statements directly into group_by() to group by conditions.
+
+```{r}
+## this is the key to an exercise. to be deleted before sending to seminar participants
+exer_21_1 <- df_allbus %>% 
+    group_by(age <= 45) %>%
+    drop_na() %>%
+    summarise(across(c("ep03","ep06","ls01"),
+                       list(mean=~mean(.,na.rm=TRUE),
+                            sd=~sd(.,na.rm=TRUE) )))
+
+exer_21_1
+```
+
+
+## Exercise 2
+
+In addition, let us give more intuitive names to the three variables, and place them after the variable `german`. 
+
+```{r}
+exer_21_2 <- df_allbus %>% 
+    rename(current_financial_ppt=ep03,
+           future_financial_ppt=ep06,
+           life_satisfaction=ls01) %>% 
+    relocate(c(current_financial_ppt,future_financial_ppt,life_satisfaction), .after=german)
+exer_21_2
+```
+
+## Exercise 3
+
+And let's calculate the relative and cumulative frequencies for the two age groups ("45 and younger" vs. "over 45") and separately for men and women. 
+
+
+```{r}
+## this is the key to an exercise. to be deleted before sending to seminar participants
+exer_21_3 <- df_allbus %>% 
+    group_by(age<=45,sex_fct) %>% 
+    summarise(n=n()) %>%
+    ungroup() %>%
+    drop_na() %>%
+    mutate(rel_freq = 100*n / sum(n),
+           cum_freq = 100*cumsum(rel_freq/sum(rel_freq)))
+exer_21_3
+
+```
+
+
+
+
+

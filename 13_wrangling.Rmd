@@ -1,0 +1,383 @@
+---
+title: "13_Data wrangling"
+author: "Adrian Stanciu & Ranjit Singh"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 4
+    toc_float: true
+---
+
+```{r, echo=FALSE, include=FALSE}
+## code to set up the cran mirror
+## needed to download needed packages into R
+r <- getOption("repos")
+r["CRAN"] <-"https://cloud.r-project.org/"
+options(repos=r)
+
+## code that first checks whether a package is required and installed,
+## and if not it will install it 
+
+# package haven is usefull to read spss .sav data formats
+if (!require(haven)) {
+    install.packages("haven")
+    require(haven)
+}
+# package tidyverse contains a series of helpful functions that 
+# are used to filter, group, manipulate data
+if (!require(tidyverse)) {
+    install.packages("tidyverse")
+    require(tidyverse)
+}
+
+# package dplyr contains yet another set of helpful functions
+if (!require(dplyr)) {
+    install.packages("dplyr")
+    require(dplyr)
+}
+
+## once packages are installed, they need to be activated,
+# otherwise the user has no access to the functions included
+
+library("haven")
+library("tidyverse")
+library("dplyr")
+
+# Loading some functions that help us deal with labelled data
+source("helper_functions.R")
+```
+
+___
+It is very likely that you will spend a great deal of your time with preparing your data for your final analyses. That is, you might need to manipulate, filter out, select, and so on, or in other words you might need to do some data wrangling before the actual analysis.
+
+Thankfully, the `R` community has gotten a variety of tools (or functions) that can spare us a lot of time. Not only that, but the tools are usually intuitive and once learned they can be applied across a multitude of tasks such as grouping data for analyses and visual inspection, for further manipulation and more complex analyses. 
+
+In the lecture, we mentioned that data wrangling can be seen from the perspective of `R` as:
+
+- doing multiple actions, one after the other - using pipes
+- shaping data frames, or 
+- transforming data. 
+
+These are general categories that one can think of, but they are not exclusive, and they might dependent on your specific goals. 
+
+Before working with actual data, and getting one step closer to actual reasons why social scientists would want to work with `R`, let us understand the mechanisms of a function and pipe functions, the ` %>%`.
+
+# Functions
+
+A function is a command, or a set of commands that you, as the user, instruct `R` to perform. Say, you are interested in calculating the **mean** of all values in a numeric vector - something typical when you want to know the mean of a variable in your projects. 
+
+Mean, in this instance, is a function that you are instructing `R` to calculate.
+
+Let's assume you collected data on the age of six colleagues in your flat house or neighborhood, and you stored this data into a vector or variable called `ages`. Unfortunately, one participant chose not to disclose their age and so you are having a data point or value missing. And this is a common occurrence in reality, is it not?
+
+```{r}
+# creates a numeric vector for illustration purposes
+ages <- c(22, 34, 56, NA, 19, 89)
+ages
+```
+
+To calculate the average mean over these values we simply tell `R` to do so with a function that we call `mean()`. `R` then calls this function and applies it over the vector or variable that we specify between brackets. 
+
+**Note** that a function always has the structure `name_function()`. Inside the brackets are the attributes that the function requires, or otherwise said, inside the brackets you tell `R` a specific set of rules to follow to ensure that the outcome is as desired.
+
+For instance, let us calculate the average age of the six people in our small study, and at the same time assign the results to an object in R.
+
+```{r}
+mean_1 <- mean(ages)
+mean_1
+```
+
+We notice an `Na` as the outcome and not an actual number. Surely you know by know that the culprit is the missing information from the person who chose not to disclose their age. This is something we always need to keep in the back of our mind when working in `R`, as missing information can corrupt our outcomes or bias them in ways that are not informative. 
+
+Thankfully there are inbuilt ways on how to instruct `R` to handle such missing data when calling functions. In our case - calculating the average age - we need to instruct `R` that missing data should be discarded from calculating the age. 
+
+And we do this by adding the argument `na.rm=TRUE` (na.rm stands for missing information remove?) inside the brackets of the function `mean()`. `R` then knows 
+
+(1) that we want it to calculate the average over the observations stored in the vector `ages` and 
+(2) if the vector contains missing information, to discard it from the calculation.
+
+```{r}
+mean_2 <- mean(ages, na.rm = TRUE)
+mean_2
+```
+
+Each function has additional arguments, or rules, that can be activated. Use the empty code chunk below to see what other arguments can the function `mean()`take - you can do so with the command `?mean()`.
+
+```{r}
+
+```
+
+# Piped functions
+
+It is a strong possibility that you want to perform operations on a vector or data frame that you only shortly before already operated upon. That is you might want to first prepare the data - say, instruct `R` to only perform operations on one group of participants - and only then calculate the mean for that group. 
+
+You can of course do this separately, store each step into an `R` object and then operate on the newly created object. But, this can be tedious and at times it can get confusing, which step is which.
+
+Piped functions as introduced by ` %>% ` are a life saver, as the instruct `R` to store in the temporary memory an object, operate on it, store it again in the temporary memory and finally perform a last operation and this time store the outcome in an object in `R` that can be called, visualized, and so on. In other words, piped functions simplify the work flow greatly!
+
+Say, in addition to age, we also collected information on gender in our tiny study. 
+
+```{r}
+# creates a data frame containing two vectors, one numeric for age, and one character (factor) for gender
+df_example <- tibble(
+  ages =  c(22, 34, 56, NA, 19, 89),
+  gender = c("d", "f", "d", "f","m", "f")
+)
+df_example
+```
+
+We now have a data frame with two vectors (variables) and we want to again calculate the average mean of all, but separately for each gender. To do so, we either can do it step by step or using the piped functions. 
+
+## Step by step procedure
+
+First, let's do it step by step.
+
+At this stage, you can see that `R`, if instructed, can retrieve a specific column (vector) or row (observations) from a data frame and then store it, if you so desire, into a separate object on which you can then perform further operations. You can retrieve a specific column in `R` with the symbol `$` placed after the data frame. 
+
+```{r}
+# retrieves from the data frame the column containing information on age and stores that info in a separate object
+ages_2 <- df_example$ages
+ages_2
+
+# applies the identical function as above
+mean_3 <- mean(ages_2, na.rm=TRUE)
+mean_3
+```
+
+Are the results identical to the one above? Well done!
+
+Now, we can use the command `filter()` to store the age of men, women, and diverse into separate `R` objects and then calculate the mean for each gender category. 
+
+```{r}
+# creates vectors containing age information for men, women and diverse
+df_men <- filter(df_example, gender=="m")
+df_fem <- filter(df_example, gender=="f")
+df_div <- filter(df_example, gender=="d")
+
+# calls each object for inspection
+df_men
+df_fem
+df_div
+
+# we now store the content of the vector age as a separate object
+ages_men <- df_men$ages
+ages_fem <- df_fem$ages
+ages_div <- df_div$ages
+
+# applies the function mean() to each object
+mean_men <- mean(ages_men, na.rm=TRUE)
+mean_fem <- mean(ages_fem, na.rm=TRUE)
+mean_div <- mean(ages_div, na.rm=TRUE)
+
+# inspects the results
+mean_men
+mean_fem
+mean_div
+```
+
+Results are in: 
+
+- there is only one man in our tiny study, and so the "average" male age = 19
+- there are two valid age observations for women, and their average age = 61.5
+- and there are two valid age observations for diverse, and their average age = 39.
+
+## Using ` %>% `
+
+Though the approach above gave us our intended outcome, it took 5 steps for each gender category, so 15 lines of code, to arrive at the desired outcome. 
+
+The piped functions can simplify this, organize your code, as well as give results faster. 
+
+Let us now arrive at identical results but using the ` %>% ` approach. 
+
+<!--- #RS# Since we point out that there is only one man, I have added n() to summarise() --->
+
+```{r}
+# calculates the average age using %>% 
+# it first groups after gender
+# then it calculates the mean age for each group
+average_age_gender <- df_example %>% 
+  group_by(gender) %>%  # step 1
+  summarise(mean=mean(ages,na.rm=TRUE),# step 2
+            n = n()) 
+
+# calls the results
+average_age_gender
+```
+
+- Are the results identical?
+- Did it take less time to arrive at them?
+
+(Tipp: n() adds the number of cases for each group to our summarise() result.)
+
+Let us have one extra example on using the ` %>% ` for performing several operations at once. For this, let's say that in our tiny study we also collected data on whether a person is a cat- or a dog-person, and stored this in a vector called `pets`.
+
+```{r}
+# creates a data frame containing two vectors, one numeric for age,  one character (factor) for gender, and one character (factor) for whether a cat- or a dog-person
+df_example_2 <- tibble(
+  ages =  c(22, 34, 56, NA, 19, 89),
+  gender = c("d", "f", "d", "f","m", "f"),
+  pets = c("cat","cat","dog","cat", "dog","dog")
+)
+df_example_2
+```
+
+We still want to calculate the average age for each group separately, but this time we want to make sure that we do so only for those who are dog-lovers. (Sorry, cat-lovers :) ).
+
+```{r}
+# calculates the average age using %>% 
+# it first filters only the dog-lovers
+# then groups after gender
+# then it calculates the mean age for each group
+average_age_gender_2 <- df_example_2 %>% 
+  filter(pets=="dog") %>% # step 1
+  group_by(gender) %>%  # step 2
+  summarise(mean=mean(ages,na.rm=TRUE)) # step 3
+
+# calls the results
+average_age_gender_2
+```
+
+Now, you should be able to calculate the average age only for women but separately for dog- and cat-lovers using the empty code chunk below. What are your results?
+
+```{r}
+
+```
+
+# Working with ALLBUS data
+
+Let us now apply some of the commands learned during class to the ALLBUS data. 
+
+First, we import the data in the `R` environment using the known command from `11_import.Rmd`.
+
+```{r}
+
+# Here we read the labelled ALLBUS data 
+df_allbus_spss <- readRDS("allbus_short.Rds") 
+
+# Tipp: We are reading a native R .Rds file. 
+# It contains SPSS style data, but the native file we prepared loads far faster!
+
+# Here we save the data as native R:
+df_allbus <-  naturalize_labelled_df(df_allbus_spss)
+
+
+# we call the first observations of the data frame for inspection only
+head(df_allbus)
+
+# Note that we now have _fct copies added to our data!
+```
+
+We also create a dataframe for variable and value labels again:
+
+```{r}
+
+allbus_labels <- register_labels(df_allbus_spss)
+
+```
+
+
+
+We can now explore varying ways in shaping the data frame. As a reminder, here is a list of functions that usually can help us achieve that:
+
+- `filter()`: chooses which rows (observations) to keep
+- `drop_na()`: removes rows with missing values
+- `sample_n()`: chooses a certain number of rows
+- `select()`: chooses which columns (variables) to keep
+- `rename()`: renames columns (variables)
+- `arrange()`: reorders rows (observations)
+
+## Exercises
+
+### 1 
+
+Using the pipe operator ` %>% `, do the following in one go:
+
+(1) sample 100 observations from the data frame at random
+(2) select columns (variables) `sex`, `age`, `german`, `ep01`, `ep04`, `pa02a` and `ls01`
+(3) rename `ep01` into `germ_econ_now` and `ep03` into `germ_econ_future`
+(4) filter all cases (participants) aged 25 or older
+
+(optional) calculate the mean (using the function `mean()`) and the standard deviation (using the function `sd()`) of the column `ls01`. For now this means saving the filtered dataframe and then using its variables with $.
+
+Remember that the pipe operator is one way of connecting varying steps in the process of arriving at the final outcome. The order in which you call the functions can change the final outcome!
+
+
+```{r}
+#RS# I have removed the answers?
+# Also, summarise is the next lesson.
+# Instead, I would say people should save the filtered data and then calculate mean and sd.
+```
+
+### 2
+
+In the data frame there, at least one variable is reverse coded - the scale anchors are non-intuitively reversed such that higher values on the scale pertain to lower values on the construct. 
+
+From the list below, can you spot which one has answer options that are reversed coded? A look back at the session "The curse of labelled data"!
+
+- `pa01`
+- `pa02a`
+- `pa17`
+
+```{r}
+# Hint: Remeber that we have saved all labels to the allbus_labels dataframe.
+
+# Alternative: Remember that allbus_df contains _fct variables
+
+```
+
+Now that you've identified a variables with a reverse coded answer scale, let us reverse the scale to a more intuitive one. As a reminder, reverse coding a scale means that the values on the scale are coded to reflect the opposites from what they were originally recorded. On a scale from 1 to 5, a 5 becomes 1, a 4 becomes 2 and so on. 
+
+(!) Note: If we had not removed labels with `naturalize_labelled_df()`, we would have to do it manually. If R throws an error due to labelled data, please use `zap_labels(some_var)` to remove them.
+
+
+
+```{r}
+# without the pipe operator
+exer_2_1 <- recode(df_allbus$pa02a,
+                                 `5`=1L, 
+                                 `4`=2L,
+                                 `3`=3L,
+                                 `2`=4L,
+                                 `1`=5L)
+
+# with the pipe operator
+exer_2_2 <- df_allbus %>% 
+  mutate(pa02a_r = recode(pa02a,
+                          `5`=1L,
+                          `4`=2L,
+                          `3`=3L,
+                          `2`=4L,
+                          `1`=5L ))
+
+exer_2_1
+exer_2_2
+```
+
+### Bonus Tipp: In practice, we would just write a helper function flip_item() to invert items.
+
+```{r}
+
+# The function flip_item() inverts numerical scores.
+
+# You can define min_score and max_score manually. 
+# If you do not define them manually, the function assumes that the lowest and highest value in the data are min and max scores. This assumption can be dangerous, however!
+
+flip_item <- function(x, min_score = min(x, na.rm = TRUE), max_score = max(x, na.rm = TRUE)){
+  ((x-min_score)*-1)+max_score
+}
+
+
+
+exer_2_2 %>% 
+  mutate(
+    pa01_flipped = flip_item(pa01)
+  ) %>% 
+  select(
+    starts_with("pa01") # a little trick, which selects the numeric original, the factor and the flipped var!
+  )
+  
+
+
+```
+

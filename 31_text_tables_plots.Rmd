@@ -1,0 +1,374 @@
+---
+title: "31_text_tables_plots"
+author: "Adrian Stanciu & Ranjit Singh"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: yes
+    toc_depth: 4
+    toc_float: yes
+---
+
+___
+In this session, we take the output table we've intended on creating in the second exercise in the session `23_analysis` and we're exploring the ways to link text and table content into one document - be it pdf, word of html. 
+
+You can have a look at the `R Markdown` basics [here](https://rmarkdown.rstudio.com/authoring_basics.html). This will help you in your first steps in editing text in Markdown documents. 
+
+For instance, 
+
+- adding an image from your working using `![](path_to_image/image_name.file_format)`
+- linking a web page to the text using `[text in document where the website is linked at](linking website here)`
+
+
+```{r setup, include=FALSE, results="asis"}
+# code to set up the entire markdown environment
+knitr::opts_chunk$set(echo = FALSE,  warning = FALSE, message = FALSE)
+
+## code to set up the cran mirror
+## needed to download needed packages into R
+r <- getOption("repos")
+r["CRAN"] <-"https://cloud.r-project.org/"
+options(repos=r)
+
+## code that first checks whether a package is required and installed,
+## and if not it will install it 
+
+# package haven is usefull to read spss .sav data formats
+if (!require(haven)) {
+    install.packages("haven")
+    require(haven)
+}
+# package tidyverse contains a series of helpful functions that 
+# are used to filter, group, manipulate data
+if (!require(tidyverse)) {
+    install.packages("tidyverse")
+    require(tidyverse)
+}
+
+# package dplyr contains yet another set of helpful functions
+if (!require(dplyr)) {
+    install.packages("dplyr")
+    require(dplyr)
+}
+
+# data visualization package
+if (!require(ggplot2)) {
+    install.packages("ggplot2")
+    require(ggplot2)
+}
+# package to calculate t_test
+if (!require(tidymodels)) {
+    install.packages("tidymodels")
+    require(tidymodels)
+}
+# package for nice tables
+if (!require(kableExtra)) {
+    install.packages("kableExtra")
+    require(kableExtra)
+}
+
+# first checks if the package is installed on the machine and then activates it
+if (!require(plotly)) {
+    install.packages("plotly")
+    require(plotly)
+}
+
+
+## once packages are installed, they need to be activated,
+# otherwise the user has no access to the functions included
+
+library("haven")
+library("tidyverse")
+library("dplyr")
+library("tidyverse")
+library("ggplot2")
+library("tidymodels")
+library("kableExtra")
+library("plotly")
+
+# Loading some functions that help us deal with labelled data
+source("helper_functions.R")
+
+```
+
+
+```{r include=FALSE}
+# LOAD DATA
+
+# Load data with SPSS labelled  variables
+df_allbus_spss <- readRDS("allbus_short.Rds")
+
+# save the variable and value labels
+allbus_labels <- register_labels(df_allbus_spss)
+
+# create native R dataframe
+df_allbus <- naturalize_labelled_df(df_allbus_spss)
+
+# remove the SPSS style dataframe (optional)
+rm(df_allbus_spss)
+```
+
+```{r}
+
+# MODEL 1
+# creates data frame containing only the variables of interest
+df_reg_2 <- df_allbus %>% 
+  mutate(vote_int=(pv20+pv21+pv22)/3) %>% 
+  select(pa01,vote_int) 
+
+# estimates the simple ression model
+# vote_int ~ pa01
+model_1 <- df_reg_2 %>% 
+  lm(vote_int ~ pa01,.)
+
+
+# MODEL 2
+# creates new data frame containing 
+df_reg_3 <- df_allbus %>% 
+    mutate(vote_int=(pv20+pv21+pv22)/3) %>% 
+    select(sex,pa01,vote_int) 
+# transforms sex into a factor variable
+df_reg_3$sex <- as.factor(df_reg_3$sex)
+
+# calculates the regression
+# vote_int ~ pa01 + sex
+model_2 <- df_reg_3 %>% 
+    lm(vote_int ~ pa01 + sex,.)
+
+# MODEL 3
+model_3 <- df_reg_3 %>% 
+    lm(vote_int ~ pa01 * sex,.)
+ 
+
+###
+
+# Checks the explantory power of each model
+# R square model 1
+rsq_model_1 <- glance(model_1)$adj.r.squared
+
+# R square model 2
+rsq_model_2 <- glance(model_2)$adj.r.squared
+
+# R square model 3
+rsq_model_3 <- glance(model_3)$adj.r.squared
+
+
+###
+
+# compares models with F-test
+model_comparison <- anova(model_1,model_2,model_3) %>% 
+  tidy() %>% 
+  add_column(model=c("model 1","model 2", "model 3")) %>% # adds a new column to indicate which model is which
+  relocate(model, .before = res.df) %>% # relocates new column at the beginning of table
+  add_column(r_square=c(rsq_model_1,rsq_model_2,rsq_model_3)) %>% 
+  relocate(r_square,.after=model)
+```
+
+___
+# Tables
+
+If we knit this markdown document into a pdf or html document, we will only get the text and not the code as well. This is due to the fact that we've instructed `RStudio` to not echo the R chunk codes (see echo = FALSE).
+
+If we now want to call `R` object that we've created in the chunks above, we would need to call them only in a separate `R` code chunk, as follows:
+
+```{r}
+# call a table containing the model comparison output
+model_comparison
+```
+
+This table doesn't look too nice (in the output document) as it is. So, we can use the package `kableExtra` (or others) to edit it further, and make it more "presentable".
+
+```{r}
+model_comparison %>% kableExtra::kable()
+```
+
+- 
+
+This already looks a bit better, but it is still far from perfect. Let us add a nother layer to it.
+
+- 
+
+```{r}
+model_comparison %>% kableExtra::kable() %>% kable_classic()
+```
+
+We've applied a style layer called "classic". We can also add more personalized styles. See [here](https://bookdown.org/yihui/rmarkdown-cookbook/kable.html) for some tips on how to do that with the package `kableExtra` or [here](https://rfortherestofus.com/2019/11/how-to-make-beautiful-tables-in-r/) for tips on using other packages.
+
+
+## Exercise
+
+Check the linked materials above, and add further styles to the table. 
+
+```{r}
+
+```
+
+# Inserting results into the markdown text
+
+One additional strength of working with `R` and `RStudio` as an integrated work interface is that you can build data directly into the text, which has further applications when you write reports - you can use this feature to develop automatized reports (an example later on today).
+
+Say, we are writing a report and we want to include in the text information that we've generated in the table of results above. We can do this with the so called **in-line R code chunk**, which works similarity to the regular chunk. See quotation below
+
+> Our analysis indicates that all three models have similar R^2^ values: model 1 =  `r model_comparison$r_square[1]`, model 2 = `r model_comparison$r_square[2]` and model 3 = `r model_comparison$r_square[3]`.
+
+## Exercise
+
+Write a brief text presenting results using the tables of results above and when reporting a coefficient call that coefficient directly from the table - that is, do not write by hand but use in-line `R` code chunks. 
+
+...
+
+# Plots
+
+One further feature of working in `R` is that you have almost infinite possibilities to how you present your data or findings. 
+
+In sessions `22_descriptives` and `23_analysis` we've first worked with package `ggplot2` in creating varying plots for our data visualization. 
+
+We can do loads of creative things in presenting our results. 
+
+For instance, we can choose whether to display in one plot a factor variable as a grouping variable or whether to use that factor variable as a plot separation. 
+
+```{r}
+# creates new data frame containing also factor variable
+df_plots <- df_allbus %>% 
+  mutate(vote_int=(pv20+pv21+pv22)/3) %>% 
+  select(pa01,sex,vote_int)
+
+df_plots$sex <- as.factor(df_plots$sex) # specifies that variable sex should be treated as factor
+
+# builds a simple scatter plot with the factor variable
+# sex as a grouping variable
+p_fct_1 <- df_plots %>%
+  ggplot(aes(x=pa01,
+             y=vote_int,
+             color=sex)) + 
+  geom_point()
+
+p_fct_1
+```
+
+```{r}
+# sex as a plot separator
+p_fct_2.1 <- df_plots %>%
+  ggplot(aes(x=pa01,
+             y=vote_int,
+             color=sex)) + 
+  geom_point() + 
+  facet_wrap("sex")
+
+p_fct_2.1
+
+# sex as a plot separator, 
+# but having more control over how the plots are organized
+p_fct_2.2 <- df_plots %>%
+  ggplot(aes(x=pa01,
+             y=vote_int,
+             color=sex)) + 
+  geom_point() + 
+  facet_grid(rows="sex")
+
+p_fct_2.2
+```
+
+If you recall from before, we can add trend lines to each plot, as either a regression line or a simple trend. Let us add here a trend line (line is not estimated in a regression model). 
+
+BTW: The shadded cloud around the trend line signifies the 95% CI. 
+
+```{r}
+p_fct_2.3 <- df_plots %>%
+  ggplot(aes(x=pa01,
+             y=vote_int,
+             color=sex)) + 
+  geom_point() + 
+  geom_smooth() + 
+  facet_wrap("sex")
+
+p_fct_2.3
+
+```
+
+This already looks quite nice and particularly informative at a first glance. But, we can further improve on this plot by adding title and changing varying elements of the plot. 
+
+```{r}
+# adds title and y-axis and x-axis names
+p_fct_2.4 <- df_plots %>%
+  ggplot(aes(x=pa01,
+             y=vote_int,
+             color=sex)) + 
+  labs(title = "Effect of left-right political interest on intention to vote for the current German government",
+       x = "Self-placement on left-right political spectrum",
+       y = "Aggregated score over intention to vote for SPD,FDP or the Greens",
+       color = "Gender") +
+  geom_point() + 
+  geom_smooth() + 
+  facet_wrap("sex")
+  
+  p_fct_2.4
+```
+
+Already much better. But we can improve on this even further. For instance, we can add a specific theme to our plot. Either a pre-defined one, or we can define one the way we like it. 
+
+```{r}
+# adds the pre-defined theme_classic to the plot
+p_fct_2.5 <- p_fct_2.4 + theme_classic()
+p_fct_2.5
+```
+
+```{r}
+# defines personal theme and adds it to the plot
+mytheme <- theme(axis.text.x = element_text(angle = 45, vjust = 0.9, hjust=1, size = 10),
+                 panel.background = element_rect(fill="white", color = "grey50"),
+                 panel.grid.major.y = element_line(color="grey90"),
+                 axis.title.y = element_text(vjust= 0.5, hjust=1, angle = 90)
+)
+
+p_fct_2.6 <- p_fct_2.4 + mytheme
+p_fct_2.6
+```
+
+If for whatever reason you want to knit (export your Markdown document as an html file) you can even make your plots interactive using the package `plotly`.
+
+**Note**: the interactive plots only make sense in html formats. They will not work in pdf or word formats.
+
+```{r}
+
+# the only thing you need to do once you've created your "regular" plot using ggplot is to call the function ggplotly() over the ggplot object
+
+p_interactive <- ggplotly(p_fct_2.6)
+p_interactive
+```
+
+In some cases we might rather prefer to save the plots as separate files and use them in your further reports or papers. We can easily do this, and specify several features when we export the file. 
+
+```{r}
+# saves one of the plots created above in your working directory!
+
+ggsave(filename = "left_right_voting.png",
+       plot = p_fct_2.5,
+       device = "png",
+       width = 30,
+       height = 15,
+       units = "cm",
+       dpi = 300)
+
+# For RMD files, the working directory is the directory where the .RMD file is located.
+
+```
+
+
+## Exercise
+
+Use the information on the slides and customize a plot of your choice. Show to the rest of us what you've got! :)
+
+Some ideas:
+
+* Create "facets" by grouping the plot into separate panels.
+* Apply a preset theme, like theme_bw() or theme_minimal(). Or if you are adventurous: theme_void()
+* Add a style argument to a geom, Perhaps a linetype = "dashed" to geom smooth? Just remember: decorative styles inside a geom() but outside of aes()!
+* Perhaps add +coord_flip() to your plot and see what happens ;)
+
+```{r}
+
+
+
+```
+
